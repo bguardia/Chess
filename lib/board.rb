@@ -16,6 +16,7 @@ class Board
 
   public
   def place(piece, pos)
+    return nil unless cell_exists?(pos)
     x = pos[0]
     y = pos[1]
     @arr[x][y] = piece
@@ -40,6 +41,16 @@ class Board
     end
 
     return nil
+  end
+
+  def cell_exists?(pos)
+    valid_x = pos[1] >= 0 && pos[1] < @width
+    valid_y = pos[0] >= 0 && pos[0] < @height
+    if valid_x && valid_y
+      return true
+    else
+      return false
+    end
   end
 
   def remove_at(pos)
