@@ -78,11 +78,16 @@ module Movement
     end
 
     def diagonally(n)
-      n = to_arr(n).last
-      up(1).and.left(1).up_to(n).or.
-        up(1).and.right(1).up_to(n).or.
-        down(1).and.left(1).up_to(n).or.
-        down(1).and.right(1).up_to(n)
+      positive_n = to_arr(n)
+      negative_n = positive_n.map { |num| -num }
+
+      moves_arr = []
+      moves_arr.concat create_moves_array(x: positive_n, y: positive_n )
+      moves_arr.concat create_moves_array(x: positive_n, y: negative_n )
+      moves_arr.concat create_moves_array(x: negative_n, y: negative_n )
+      moves_arr.concat create_moves_array(x: negative_n, y: positive_n )
+
+      modify_moves(moves_arr)
       return self
     end
 
