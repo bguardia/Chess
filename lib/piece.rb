@@ -122,6 +122,15 @@ module Movement
       return self
     end
 
+    def forward(n, piece)
+      if piece.team == "black"
+        down(n)
+      elsif piece.team == "white"
+        up(n)
+      end
+      return self
+    end
+    
     def up_to(n)
       return self unless n >= 2
       m = 1
@@ -141,13 +150,8 @@ module Movement
     end
 
     def or
-      puts "called or"
       add_moves
-      puts "modifiable_moves added to moves"
-      puts "moves: #{@moves}"
       reset_modifiable_moves
-      puts "reset modifiable_moves"
-      puts "modifiable_moves: #{@modifiable_moves}"
       return self
     end
 
@@ -180,103 +184,79 @@ module Movement
       return moves
     end
  end
+end
 
- def all_horizontal_spaces(current_pos)
-    width = 8
-    horizontal_moves_arr = []
-    x = 0
-    width.times do
-      horizontal_moves_arr << [current_pos[0], x] unless x == current_pos[1]
-      x += 1
-    end
-    return horizontal_moves_arr
-  end
+module Pieces
 
-  def all_vertical_spaces(current_pos)
-    height = 8
-    vertical_moves_arr = []
-    y = 0
-    height.times do
-      vertical_moves_arr << [y, current_pos[1]] unless y == current_pos[0]
-      y += 1 
-    end
-    return vertical_moves_arr
-  end
+  @@positions = { "black" => { :pawns => Array.new(8,1).zip((0..7).to_a),
+                               :rooks => Array.new(2,0).zip([0,7]),
+                               :knights => Array.new(2,0).zip([1,6]),
+                               :bishops => Array.new(2,0).zip([2,5]),
+                               :queen => [0,4],
+                               :king => [0,5]       },
+                  "white" =>  { :pawns => Array.new(8,6).zip((0..7).to_a),
+                                :rooks => Array.new(2,7).zip([0,7]),
+                                :knights => Array.new(2,7).zip([1,6]),
+                                :bishops => Array.new(2,7).zip([2,5]),
+                                :queen => [7,4],
+                                :king => [7,5]       }
+  }
 
-  def all_diagonal_spaces(current_pos)
-    width, height = 8, 8
-    diagonal_moves_arr = []
-    x1, y1 = current_pos[1], current_pos[0]
-    x2, y2 = 1, 1
-    checks = Array.new(4, true)
-
-    while checks.any?(true) 
-      up_right = [y1 - y2, x1 + x2]
-      up_left = [y1 - y2, x1 - x2]
-      down_right = [y1 + y2, x1 + x2]
-      down_left = [y1 + y2, x1 - x2]
-
-      diagonal_moves_arr << up_right if checks[0] = valid_pos?(up_right)
-      diagonal_moves_arr << up_left  if checks[1] = valid_pos?(up_left)
-      diagonal_moves_arr << down_right if checks[2] = valid_pos?(down_right)
-      diagonal_moves_arr << down_left if checks[3] = valid_pos?(down_left)
-      
-      x2 += 1
-      y2 += 1
-    end
-
-    return diagonal_moves_arr
-  end
-
-  def valid_pos?(pos)
-    width = 8
-    height = 8
-    valid_x = pos[1] >= 0 && pos[1] < width
-    valid_y = pos[0] >= 0 && pos[0] < height
-    if valid_x && valid_y
-      return true
-    else
-      return false
-    end
-  end
-
-  def pawn_moves(current_pos)
-    #Can move forward two spaces if first turn
-    #Otherwise, only one space in direction of the opponent
-  end
-
-  def king_moves(current_pos)
-    #one space in every direction
-    king_moves = []
-    #arr = [[0, 1], [1, 0], [0, -1], [-1, 0], [-1, -1], [1, 1], [1, -1], [-1, 1]]
-    arr = [0,1,1,-1,-1].permutation(2).to_a.uniq
+  def self.new_set(team)
+    set = []
+    set.concat(pawns(team))
+    set.concat(rooks(team))
+    set.concat(bishops(team))
+    set.concat(knights(team))
+    set << king(team)
+    set << queen(team)
     
-    arr.each do |pos|
-      move = [ pos[0] + current_pos[0], pos[1] + current_pos[1] ]
-      king_moves << move if move != current_pos
+    return set
+  end
+
+  def pawns(team)
+    pawns = []
+    @@positions[team][:pawns].each do |pos|
+      pawns << Pawn.new(team: team, current_pos: pos)
     end
-
-    #if king and rook have not moved
-    #and there is nothing between them
-    #king can do castling
-    #
-    #may need to add to possible_moves from another function
-    return king_moves
+    return pawns
   end
 
-  def rook_moves(current_pos)
-    all_horizontal_spaces(current_pos).concat(all_vertical_spaces(current_pos))
+  def rooks(team)
+    rooks = []
+    @@positions[team][:rooks].each do |pos|
+      rooks << Rook.new(team: team, current_pos: pos)
+    end
+    return rooks
   end
 
-  def queen_moves(current_pos)
-    rook_moves(current_pos).concat(all_diagonal_spaces(current_pos))
+  def bishops(team)
+    bishops = []
+    @@positions[team][:bishops].each do |pos|
+      bishops << Bishop.new(team: team, current_pos: pos)
+    end
+    return bishops
+  end
+ 
+  def knights(team)
+    knights = []
+    @@positions[team][:knights].each do |pos|
+      knights << Knight.new(team: team, current_pos: pos)
+    end
+    return knights
   end
 
-  def bishop_moves(current_pos)
-    all_diagonal_spaces(current_pos)
+  def king(team)
+    pos = @@positions[team][:king]
+    king = King.new(team: team, current_pos: pos)
   end
 
+  def queen(team)
+    pos = @@positions[team][:queen]
+    queen = Queen.new(team: team, current_pos: pos)
   end
+
+end
 
 class Piece
 
@@ -335,3 +315,25 @@ class King < Piece
   end
 
 end
+
+class Bishop < Piece
+
+  def possible_moves
+    from(current_pos).diagonally(1..7).spaces
+  end
+
+end
+
+class Pawn < Piece
+
+  def possible_moves
+    #if first move
+    from(current_pos).forward(1..2)
+    #if not first move
+    from(current_pos).forward(1)
+    #if an opponent's piece is diagonally adjacent
+    #get opponent's piece location
+    #if it was their last move, allow en passant
+  end
+end
+
