@@ -198,17 +198,17 @@ module Pieces
                                :rooks => Array.new(2,0).zip([0,7]),
                                :knights => Array.new(2,0).zip([1,6]),
                                :bishops => Array.new(2,0).zip([2,5]),
-                               :queen => [0,4],
-                               :king => [0,5]       },
+                               :queen => [0,3],
+                               :king => [0,4]       },
                   "white" =>  { :pawns => Array.new(8,6).zip((0..7).to_a),
                                 :rooks => Array.new(2,7).zip([0,7]),
                                 :knights => Array.new(2,7).zip([1,6]),
                                 :bishops => Array.new(2,7).zip([2,5]),
-                                :queen => [7,4],
-                                :king => [7,5]       }
+                                :queen => [7,3],
+                                :king => [7,4]       }
   }
 
-  def self.new_set(team)
+  def Pieces.new_set(team)
     set = []
     set.concat(pawns(team))
     set.concat(rooks(team))
@@ -220,7 +220,7 @@ module Pieces
     return set
   end
 
-  def pawns(team)
+  def Pieces.pawns(team)
     pawns = []
     @@positions[team][:pawns].each do |pos|
       pawns << Pawn.new(team: team, current_pos: pos)
@@ -228,7 +228,7 @@ module Pieces
     return pawns
   end
 
-  def rooks(team)
+  def Pieces.rooks(team)
     rooks = []
     @@positions[team][:rooks].each do |pos|
       rooks << Rook.new(team: team, current_pos: pos)
@@ -236,7 +236,7 @@ module Pieces
     return rooks
   end
 
-  def bishops(team)
+  def Pieces.bishops(team)
     bishops = []
     @@positions[team][:bishops].each do |pos|
       bishops << Bishop.new(team: team, current_pos: pos)
@@ -244,7 +244,7 @@ module Pieces
     return bishops
   end
  
-  def knights(team)
+  def Pieces.knights(team)
     knights = []
     @@positions[team][:knights].each do |pos|
       knights << Knight.new(team: team, current_pos: pos)
@@ -252,12 +252,12 @@ module Pieces
     return knights
   end
 
-  def king(team)
+  def Pieces.king(team)
     pos = @@positions[team][:king]
     king = King.new(team: team, current_pos: pos)
   end
 
-  def queen(team)
+  def Pieces.queen(team)
     pos = @@positions[team][:queen]
     queen = Queen.new(team: team, current_pos: pos)
   end
@@ -272,11 +272,26 @@ class Piece
 
   def initialize(args = {})
     @team = args.fetch(:team, "")
-    @current_pos = []
+    @current_pos = args.fetch(:current_pos, [0,0]) 
+    @icon = args.fetch(:icon, false) || get_icon
+    @moved = false
   end
 
   def set_pos(pos)
     @current_pos = pos
+  end
+
+  #Get either white_icon or black_icon from subclasses
+  def get_icon
+    if @team == "white"
+      white_icon
+    else
+      black_icon
+    end
+  end
+
+  def to_s
+    @icon
   end
 
   #Pieces require a possible_moves class
@@ -284,6 +299,14 @@ class Piece
 end
 
 class Queen < Piece
+
+  def white_icon
+    "\u2655"
+  end
+
+  def black_icon
+    "\u265B"
+  end
 
   def possible_moves
     from(current_pos).vertically(1..7).or.
@@ -295,6 +318,14 @@ end
 
 class Rook < Piece
 
+  def white_icon
+    "\u2656" 
+  end
+
+  def black_icon
+    "\u265C"
+  end
+
   def possible_moves
     from(current_pos).horizontally(1..7).or.
       vertically(1..7).spaces
@@ -304,6 +335,14 @@ end
 
 class Knight < Piece
 
+  def white_icon
+    "\u2658"
+  end
+
+  def black_icon
+    "\u265E"
+  end
+
   def possible_moves
     from(current_pos).horizontally(2).and.vertically(1).or.
       vertically(2).and.horizontally(1).spaces
@@ -312,6 +351,14 @@ class Knight < Piece
 end
 
 class King < Piece
+
+  def white_icon
+    "\u2654"
+  end
+
+  def black_icon
+    "\u265A"
+  end
 
   def possible_moves
     #regular movement
@@ -324,6 +371,14 @@ end
 
 class Bishop < Piece
 
+  def white_icon
+    "\u2657"
+  end
+
+  def black_icon
+    "\u265D"
+  end
+
   def possible_moves
     from(current_pos).diagonally(1..7).spaces
   end
@@ -332,11 +387,22 @@ end
 
 class Pawn < Piece
 
+  def white_icon
+    "\u2659"
+  end
+
+  def black_icon
+    "\u265F"
+  end
+
   def possible_moves
     #if first move
-    from(current_pos).forward(1..2, self).spaces
-    #if not first move
-    from(current_pos).forward(1, self).spaces
+    unless @moved
+      from(current_pos).forward(1..2, self).spaces
+    else
+      #if not first move
+      from(current_pos).forward(1, self).spaces
+    end
     #if an opponent's piece is diagonally adjacent
     #get opponent's piece location
     #if it was their last move, allow en passant
