@@ -26,22 +26,19 @@ module Movement
       end
     end
 
-    private
+    #applies a moves_arr to any currently modifiable moves (any moves defined before an #or call, or [0,0])
     def modify_moves(moves_arr)
       modified_moves = []
       @modifiable_moves.each do |one|
-        puts "one: #{one}"
         moves_arr.each do |two|
           modified_moves << [ one[0] + two[0], one[1] + two[1] ]
-          puts ">two: #{two}, new_move: #{modified_moves.last}" 
         end
       end
-      puts "\nmodified_moves: #{modified_moves}"
       @modifiable_moves = modified_moves.dup
-      puts "modifiable_moves: #{@modifiable_moves}"
     end
 
-    private
+    #creates an array of moves from separate x and y arrays
+    #works well for two arrays of equal length, or one single element with another array of any size
     def create_moves_array(args)
       move_arr = []
       x = args.fetch(:x, [0])
@@ -49,10 +46,8 @@ module Movement
       y_i = 0
       x_i = 0
 
-      puts "x: #{x}, y: #{y}"
       loop do
         move_arr << [y[y_i], x[x_i]]
-        puts "#{move_arr.last}"
         x_i += 1 if more_x = x_i < x.length - 1
         y_i += 1 if more_y = y_i < y.length - 1
         break unless more_x || more_y
@@ -61,10 +56,28 @@ module Movement
       return move_arr
     end
 
+    def reset_modifiable_moves
+      @modifiable_moves = [[0,0]]
+    end
+    
+    def to_arr(n)
+      if n.kind_of?(Array)
+        return n
+      elsif n.kind_of?(Integer)
+        return [n]
+      elsif n.kind_of?(Range)
+        return n.to_a
+      end
+    end
+
+    def reset_moves
+      @moves = []
+    end
+
     #Movement methods are chained to create arrays of possible positions
-    #Methods can accept an integer or a range/array of integers
-    #  A single integer creates a single position
-    #  A range or array will create a position for each element
+    #Methods can accept an Integer or a Range/Array of Integers
+    #  A single Integer creates a single move
+    #  A Range or Array will create a position for each element
     #Methods can be changed with #and, #or and #up_to methods to create more complex movements
     #
     #Finally, ending the chain with #spaces will return a final array of moves based on the origin
@@ -82,10 +95,10 @@ module Movement
       negative_n = positive_n.map { |num| -num }
 
       moves_arr = []
-      moves_arr.concat create_moves_array(x: positive_n, y: positive_n )
-      moves_arr.concat create_moves_array(x: positive_n, y: negative_n )
-      moves_arr.concat create_moves_array(x: negative_n, y: negative_n )
-      moves_arr.concat create_moves_array(x: negative_n, y: positive_n )
+      moves_arr.concat create_moves_array(x: positive_n, y: positive_n ) #down-right
+      moves_arr.concat create_moves_array(x: positive_n, y: negative_n ) #up-right
+      moves_arr.concat create_moves_array(x: negative_n, y: negative_n ) #down-left
+      moves_arr.concat create_moves_array(x: negative_n, y: positive_n ) #up-left
 
       modify_moves(moves_arr)
       return self
@@ -127,6 +140,7 @@ module Movement
       return self
     end
 
+    #Generates a different direction based on piece's team
     def forward(n, piece)
       if piece.team == "black"
         down(n)
@@ -136,6 +150,7 @@ module Movement
       return self
     end
     
+    #Will multiply @modifiable_moves n times
     def up_to(n)
       return self unless n >= 2
       m = 1
@@ -150,37 +165,23 @@ module Movement
       return self
     end
 
+    #Currently has no logical purpose, only exists in contrast with #or, and makes method chains more human-readable
     def and
       return self
     end
 
+    #Takes all moves generated up to this method and moves them to the @moves array, protecting them from further modification
+    #For example, a knight's possible moves can be described as: #horizontally(2).and.vertically(1).or.vertically(2).and.horizontally(1).spaces
     def or
       add_moves
       reset_modifiable_moves
       return self
     end
 
-    private
-    def reset_modifiable_moves
-      @modifiable_moves = [[0,0]]
-    end
-    
-    def to_arr(n)
-      if n.kind_of?(Array)
-        return n
-      elsif n.kind_of?(Integer)
-        return [n]
-      elsif n.kind_of?(Range)
-        return n.to_a
-      end
-    end
-
-    private
-    def reset_moves
-      @moves = []
-    end
-
-    public
+    #Takes all generated moves and creates positions based on the @origin position
+    #and returns an array of positions. @moves and @modifiable_moves are also reset.
+    #
+    #This method should always be called at the end of a method chain.
     def spaces
       add_moves
       moves = @moves.map { |move| [ move[0] + @origin[0], move[1] + @origin[1] ] }
@@ -188,7 +189,7 @@ module Movement
       reset_modifiable_moves
       return moves
     end
- end
+  end
 end
 
 module Pieces
@@ -333,9 +334,9 @@ class Pawn < Piece
 
   def possible_moves
     #if first move
-    from(current_pos).forward(1..2)
+    from(current_pos).forward(1..2, self).spaces
     #if not first move
-    from(current_pos).forward(1)
+    from(current_pos).forward(1, self).spaces
     #if an opponent's piece is diagonally adjacent
     #get opponent's piece location
     #if it was their last move, allow en passant
