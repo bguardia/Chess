@@ -1,5 +1,6 @@
-#require 'chess'
-
+$: << "."
+require 'chess'
+require 'json'
 
 module Movement
 
@@ -274,7 +275,7 @@ class Piece
     @team = args.fetch(:team, "")
     @current_pos = args.fetch(:current_pos, [0,0]) 
     @icon = args.fetch(:icon, false) || get_icon
-    @moved = false
+    @moved = args.fetch(:moved, false)
   end
 
   def set_pos(pos)
@@ -288,6 +289,20 @@ class Piece
     else
       black_icon
     end
+  end
+
+  def to_json
+    JSON.dump({ :class => self.class,
+                :icon => @icon,
+                :team => @team,
+                :current_pos => @current_pos,
+                :moved => @moved })
+  end
+
+  def self.from_json(json_string)
+    data = JSON.load json_string
+    data.transform_keys!(&:to_sym)
+    Kernel.const_get(data[:class]).new(data)
   end
 
   def to_s
