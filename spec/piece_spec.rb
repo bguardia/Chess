@@ -1,6 +1,14 @@
 require 'spec_helper'
 require 'piece'
 
+def return_filled_board(pieces)
+  board = Board.new
+  pieces.each do |p|
+    board.place(p, p.current_pos)
+  end
+  return board
+end
+
 describe Piece do
 
   describe "#initialize" do
@@ -34,9 +42,50 @@ describe Movement do
     end
   end
 
+  describe "#who_can_reach?" do
+    it { expect(Movement).to respond_to(:who_can_reach?).with(2).arguments }
+    it "returns all pieces that can reach a given space on given board" do
+      bishop = Bishop.new(team: "white", current_pos: [4,4])
+      pawn = Pawn.new(team: "black", current_pos: [1, 6])
+      knight = Knight.new(team: "white", current_pos: [4,7])
+      dest = [2, 6]
+      pieces = [bishop, pawn, knight]
+      board = Board.new
+      pieces.each { |p| board.place(p, p.current_pos) }
+      expect(Movement.who_can_reach?(dest, board)).to match_array pieces
+    end
+  end
+
+   describe "#blocked?" do
+     it { expect(Movement).to respond_to(:blocked?).with(3).arguments }
+     it "returns true if a space between piece and destination is occupied" do
+       rook = Rook.new(current_pos: [7,0])
+       queen = Queen.new(current_pos: [5,0])
+       dest = [4,0]
+       board = return_filled_board([rook, queen])
+       expect(Movement.blocked?(rook, dest, board)).to be true
+     end
+
+     it "returns false if the piece is a knight" do
+       knight = Knight.new(current_pos: [7,5])
+       queen = Queen.new(current_pos: [6,5])
+       pawn = Pawn.new(current_pos: [5,5])
+       board = return_filled_board([knight, queen, pawn])
+       dest = [5, 4]
+       expect(Movement.blocked?(knight, dest, board)).to be false
+     end
+
+     it "returns true if a pawn's destination is occupied" do
+       dest = [4,4]
+       pawn = Pawn.new(current_pos: [6,4])
+       knight = Knight.new(current_pos: dest)
+       board = return_filled_board([pawn, knight])
+       expect(Movement.blocked?(pawn, dest, board)).to be true
+     end
+   end
+
   describe Movement::MovementArray do
     
-  
     describe "#initialize" do
       it "creates a new MovementArray with a given starting coordinate" do
         some_coords = [1,5]
@@ -153,3 +202,52 @@ describe Movement do
     end
   end
 end
+
+
+describe Pawn do
+  
+  describe "#special_moves" do
+    it "returns an diagonally adjacent squares in front of it that have an enemy piece" do
+      pawn = Pawn.new(team: "white", current_pos: [4,4])
+      p2 = Pawn.new(team: "black", current_pos: [3,3])
+      p3 = Knight.new(team: "black", current_pos: [3,5])
+
+      board = return_filled_board([pawn, p2, p3])
+      expect(pawn.special_moves(board)).to match_array [[3,3], [3,5]]
+    end
+
+    it "returns en passant if enemy piece moved next to pawn on last turn" do
+      pawn = Pawn.new(team: "white", current_pos: [4,4])
+      bishop = double("Bishop")
+      bishop.stub( :moved_last_turn? => true )
+      bishop.stub( :current_pos => [4,3] )
+      bishop.stub( :team => "black" )
+      board = return_filled_board([pawn,bishop])
+      expect(pawn.special_moves(board)).to match_array [[3,3]]
+    end
+  end
+end
+
+describe King do
+
+  describe "#special_moves" do
+    it "returns the spaces that the king can move when castling is available" do
+      king = King.new(team: "white", current_pos: [7, 4])
+      rook = Rook.new(team: "white", current_pos: [7, 0])
+      rook2 = Rook.new(team: "white", current_pos: [7, 7])
+      board = return_filled_board([king, rook, rook2])
+      castle_positions = [ [7, 2], [7, 6] ]
+      expect(king.special_moves(board)).to match_array castle_positions
+    end
+
+    it "does not return a castle if king would be in check in any position in between" do
+      king = King.new(team: "white", current_pos: [7,4])
+      rook = Rook.new(team: "white", current_pos: [7,0])
+      bishop = Bishop.new(team: "black", current_pos: [5,1])
+      board = return_filled_board([king, rook, bishop])
+      expect(king.special_moves(board)).to match_array []
+    end
+  end
+
+end
+

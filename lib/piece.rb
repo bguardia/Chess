@@ -191,6 +191,91 @@ module Movement
       return moves
     end
   end
+
+  def self.get_possible_moves(piece, board, include_special_moves = true)
+    #Get all possible moves from current location
+    possible_moves = piece.possible_moves
+
+    #Remove moves that are off-board or blocked
+    possible_moves.filter! do |move|
+      board.cell_exists?(move) && !blocked?(piece, move, board)
+    end
+
+    #Get special moves
+    if include_special_moves
+      special_moves = piece.special_moves(board)
+      possible_moves << special_moves unless special_moves.nil? 
+    end
+
+    return possible_moves  
+  end
+
+  def self.blocked?(piece, move, board)
+    return false if piece.kind_of?(Knight) #Knights can jump over pieces
+
+    #get the number of spaces between current_pos and move
+    spaces_between = get_spaces_between(piece.current_pos, move)
+
+    #If piece is a pawn, add destination to spaces_between array
+    #Pawns can't take enemy pieces through normal movement
+    if piece.kind_of?(Pawn)
+      spaces_between << move
+    end
+
+    #return true if there are any pieces between the piece and the destination
+    blocked = spaces_between.any? do |space|
+      board.get_piece_at(space)
+    end
+  end
+
+  def self.who_can_reach?(space, board, args = {})
+    pieces = board.get_pieces(args)
+=begin
+    #filter any unwanted pieces as defined by optional args
+    if filter = args.fetch(:filter, nil)
+      pieces.filter! do |piece|
+        key = filter[:key]
+        val = filter[:value]
+        !piece[key] == value
+      end
+    end
+=end
+    pieces.filter! do |piece|
+      get_possible_moves(piece, board, false).include?(space)
+    end
+
+    return pieces
+  end
+
+  #Returns an array of coordinates between two given coordinates
+  def self.get_spaces_between(a, b)
+    spaces_between = []
+
+    #Get duplicates of arrays so as not to harm originals
+    start = a.dup
+    dest = b.dup
+
+    while start[0] != dest[0] || start[1] != dest[1]
+      if start[0] < dest[0]
+        start[0] += 1
+      elsif start[0] > dest[0]
+        start[0] -= 1
+      end
+
+      if start[1] < dest[1]
+        start[1] += 1
+      elsif start[1] > dest[1]
+        start[1] -= 1
+      end
+      
+      spaces_between << start.dup
+    end
+
+    spaces_between.pop
+
+    return spaces_between
+  end
+
 end
 
 module Pieces
@@ -269,6 +354,8 @@ class Piece
 
   include Movement
 
+  @@moved_last_turn = nil #stores the piece that moved last
+
   attr_reader :team, :current_pos
 
   def initialize(args = {})
@@ -291,6 +378,9 @@ class Piece
     end
   end
 
+  def white_icon; end
+  def black_icon; end
+
   def to_json
     JSON.dump({ :class => self.class,
                 :icon => @icon,
@@ -303,6 +393,32 @@ class Piece
     data = JSON.load json_string
     data.transform_keys!(&:to_sym)
     Kernel.const_get(data[:class]).new(data)
+  end
+
+  #Pieces class keeps track of the last moved piece
+  #Used to check for certain moves such as en passant
+  #which must be performed on the piece that moved last
+  def self.update_last_moved(piece)
+    @@moved_last_turn = piece
+  end
+
+  public
+  def moved_last_turn?
+    self == @@moved_last_turn
+  end
+
+  #Subclasses must define their own behavior for possible_moves and special_moves
+  #Special moves are any moves that require a greater context, such as en passant or castling,
+  #therefore requiring board to be passed as an argument
+  def possible_moves; end
+  def special_moves(board); end
+
+  def set_moved(bool)
+    @moved = bool
+  end
+
+  def moved?
+    @moved
   end
 
   def to_s
@@ -382,6 +498,53 @@ class King < Piece
     #castling..
   end
 
+  def special_moves(board)
+    special_moves_arr = []
+
+    #Castling
+    #When nor the king nor a rook have moved
+    #and there are no pieces in between them
+    #and the king is not in check at any of the positions
+    #allow movement of both rook and king
+    if !moved?
+      #Check for ally rooks on same row
+      #If not on same row, they have already moved and are ineligible for castling
+      row = self.current_pos[0]
+      rooks = board.get_pieces(team: self.team).filter { |p| p.kind_of?(Rook) }
+
+      if !rooks.empty?
+        #Check if spaces between rook and king are empty
+        rooks.filter! do |rook|
+          !Movement.blocked?(rook, self.current_pos, board)
+        end
+
+        return [] if rooks.empty?
+      
+        moves = []
+        rooks.each do |rook|
+          if rook.current_pos[1] > self.current_pos[1]
+            move = [row, self.current_pos[1] + 2]
+          else
+            move = [row, self.current_pos[1] - 2]
+          end
+          moves << move
+        end
+
+        #Check for check at any square along the path
+        moves.select! do |move|
+          #Get spaces between moves
+          #Check if any space between moves can be reached by an enemy piece
+          !Movement.get_spaces_between(self.current_pos, move).any? do |space|
+            Movement.who_can_reach?(space, board).any? do |piece|
+              piece.team != self.team
+            end
+          end
+        end
+
+      return moves
+    end
+   end
+  end 
 end
 
 class Bishop < Piece
@@ -421,6 +584,32 @@ class Pawn < Piece
     #if an opponent's piece is diagonally adjacent
     #get opponent's piece location
     #if it was their last move, allow en passant
+  end
+
+  def special_moves(board)
+    special_moves_arr = []
+
+    #Diagonal pawn captures
+    df_moves = from(current_pos).forward(1, self).and.horizontally(1).spaces
+    df_moves.each do |move|
+      something = board.get_piece_at(move)
+      if something && something.team != team
+        special_moves_arr << move
+      end
+    end
+
+    #En passant
+    #If an enemy piece moves to a square horizontally adjacent to a pawn
+    #the pawn can capture it on the next turn
+    adj_moves = from(current_pos).horizontally(1).spaces
+    adj_moves.each_index do |index|
+      something = board.get_piece_at(adj_moves[index])
+      if something && something.team != team && something.moved_last_turn?
+        special_moves_arr << df_moves[index] #Add diagonally forward move of same index
+      end
+    end
+
+  return special_moves_arr
   end
 end
 

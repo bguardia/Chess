@@ -30,6 +30,36 @@ class Board
     place(piece, pos)
   end
 
+  def get_pieces(args = {})
+
+    pieces = []
+    @arr.each do |rank|
+      rank.each do |space|  
+        if space.kind_of?(Piece)
+          match_all = args.keys.all? do |key|
+            if key == :type
+              clz = Kernel.const_get(args[key])
+              space.kind_of?(clz)
+            else
+              inst_var = "@#{key}".to_sym
+              space.instance_variable_get(inst_var) == args[key]
+            end
+          end
+          pieces << space if match_all
+        end
+      end
+    end
+
+    return pieces
+  end
+
+  def get_piece_at(pos)
+    x = pos[0]
+    y = pos[1]
+
+    return @arr[x][y]
+  end
+
   private
   def get_coords(piece)
     @arr.each_index do |x|
@@ -43,6 +73,7 @@ class Board
     return nil
   end
 
+  public
   def cell_exists?(pos)
     valid_x = pos[1] >= 0 && pos[1] < @width
     valid_y = pos[0] >= 0 && pos[0] < @height
