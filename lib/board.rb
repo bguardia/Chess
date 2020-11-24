@@ -60,7 +60,6 @@ class Board
     return @arr[x][y]
   end
 
-  private
   def get_coords(piece)
     @arr.each_index do |x|
       @arr[x].each_index do |y|
