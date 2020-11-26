@@ -68,6 +68,61 @@ describe Movement do
     end
   end
 
+  describe "#in_check?" do
+    it "returns true if given king is attackable by enemy piece" do
+      king = King.new(starting_pos: [7,4], team: "white")
+      rook = Rook.new(starting_pos: [4,4], team: "black")
+      board = Board.new
+      [king, rook].each { |p| p.add_to_board(board) }
+      expect(Movement.in_check?(king, board)).to be true
+    end
+
+    it "returns false if no piece can reach king" do
+      king = King.new(starting_pos: [7,4], team: "white")
+      rook = Rook.new(starting_pos: [3,3], team: "black")
+      board = Board.new
+      [king, rook].each { |p| p.add_to_board(board) }
+      expect(Movement.in_check?(king, board)).to be false
+    end
+
+    it "returns false if an attacking piece is blocked" do
+      king = King.new(starting_pos: [7,4], team: "white")
+      rook = Rook.new(starting_pos: [4,4], team: "black")
+      queen = Queen.new(starting_pos: [5,4], team: "white")
+      board = Board.new
+      [king, rook, queen].each { |p| p.add_to_board(board) }
+      expect(Movement.in_check?(king, board)).to be false
+    end
+  end
+
+  describe "#checkmate?" do
+    it "returns false if king isn't currently in check" do
+      king = King.new(starting_pos: [7,4], team: "white")
+      rook = Rook.new(starting_pos: [4,4], team: "black")
+      queen = Queen.new(starting_pos: [5,4], team: "white")
+      board = Board.new
+      [king, rook, queen].each { |p| p.add_to_board(board) }
+      expect(Movement.checkmate?(king, board)).to be false
+    end
+
+    it "returns false if check is escapable" do
+      king = King.new(starting_pos: [7,4], team: "white")
+      rook = Rook.new(starting_pos: [4,4], team: "black")
+      board = Board.new
+      [king, rook].each { |p| p.add_to_board(board) }
+      expect(Movement.checkmate?(king, board)).to be false 
+    end
+
+    it "returns true if check is inescapable" do
+      king = King.new(starting_pos: [7,7], team: "white")
+      rook = Rook.new(starting_pos: [7,3], team: "black")
+      bishop = Bishop.new(starting_pos: [5,5], team: "black")
+      pawn = Pawn.new(starting_pos: [6,7], team: "white")
+      board = Board.new(pieces: [king, rook, bishop, pawn])
+      expect(Movement.checkmate?(king, board)).to be true
+    end
+  end
+
    describe "#blocked?" do
      it { expect(Movement).to respond_to(:blocked?).with(3).arguments }
      it "returns true if a space between piece and destination is occupied" do

@@ -304,6 +304,45 @@ module Movement
     return spaces_between
   end
 
+  def self.in_check?(king, board)
+    op_team = ["white", "black"].find { |t| t != king.team }
+
+    enemy_pieces = board.get_pieces(team: op_team)
+
+    king_pos = king.current_pos
+
+    puts "king's position is: #{king_pos}"
+
+    enemy_pieces.any? do |piece|
+      puts "piece: #{piece}"
+      puts "possible_moves: #{piece.possible_moves}"
+      piece.possible_moves.include?(king_pos)
+    end
+  end
+
+  def self.checkmate?(king, board)
+    return false unless in_check?(king, board)
+
+    pieces = board.get_pieces(team: king.team)
+
+    puts "pieces on king's team:"
+    pieces.each { |p| puts p }
+
+    pieces.all? do |piece|
+      puts "current piece: #{piece.class}"
+      piece.possible_moves.all? do |move|
+        puts ">current_move: #{move}"
+        #simulate move, check for check
+        #if not check, it is not checkmate
+        board.move(piece, move)
+        in_check = in_check?(king, board)
+        puts "in_check?: #{in_check}"
+        board.rewind(1)
+        puts board
+        in_check
+      end
+    end
+  end
 end
 
 module Pieces
