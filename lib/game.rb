@@ -4,6 +4,34 @@ require 'piece'
 require 'player'
 require 'json'
 
+class Move
+
+  def initialize(args)
+    @piece = args.fetch(:piece)
+    @prev_pos = args.fetch(:prev_pos)
+    @new_pos = args.fetch(:pos)
+    @removed = args.fetch(:removed, nil)
+  end
+
+  def set_removed(removed)
+    @removed = removed
+  end
+
+  def get_removed
+    @removed
+  end
+
+  def get_move
+    { piece: @piece,
+      pos: @new_pos } 
+  end
+
+  def reverse_move
+    { piece: @piece,
+      pos: @prev_pos }
+  end
+end
+
 class Game
 
  attr_reader :players, :board, :sets
@@ -26,6 +54,17 @@ class Game
    JSON.dump({ :players => @players.map(&:to_json),
                    :sets => @sets.map { |set| set.map(&:to_json) },
                    :board => @board })
+ end
+
+ def game_over?
+   @players.each do |player|
+     king = @board.get_pieces(type: "King", team: player.team)
+     return true if Movement.checkmate?(king, @board)
+   end
+ end
+
+ def draw
+
  end
 
  def self.from_json(json_str)
