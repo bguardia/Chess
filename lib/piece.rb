@@ -1,5 +1,4 @@
-$: << "."
-require 'chess'
+require './lib/chess.rb'
 require 'json'
 
 module Movement

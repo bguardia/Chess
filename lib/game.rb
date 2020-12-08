@@ -1,7 +1,5 @@
-$: << "."
-require 'chess'
-require 'piece'
-require 'player'
+require './lib/piece.rb'
+require './lib/player.rb'
 require 'json'
 
 
