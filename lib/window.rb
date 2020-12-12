@@ -1,6 +1,7 @@
 require 'curses'
 require './lib/game.rb'
-
+require './lib/board.rb'
+require './lib/piece.rb'
 
 module Keys
 
@@ -17,6 +18,7 @@ end
 module KeyMapping
 
   @stop_receiving_input = false
+
   #methods mapped to each key should be defined in each class
   def up; end
   def down; end
@@ -90,127 +92,257 @@ module CursesWrapper
 
 end
 
-class Window
+module Highlighting
+  
+  FG ||= { black: 30,
+           red: 31,
+           green: 32,
+           yellow: 33,
+           blue: 34,
+           magenta: 35,
+           cyan: 36,
+           white: 37,
+           b_black: 90,
+           b_red: 91,
+           b_green: 92,
+           b_yellow: 93,
+           b_blue: 94,
+           b_magenta: 95,
+           b_cyan: 96,
+           b_white: 97  }
 
-  attr_reader :height, :width, :top, :left, :cursor_x, :cursor_y
+  BG ||= { black: 40,
+           red: 41,
+           green: 42,
+           yellow: 43,
+           blue: 44,
+           magenta: 45,
+           cyan: 46,
+           white: 47, 
+           b_black: 100,
+           b_red: 101,
+           b_green: 102,
+           b_yellow: 103,
+           b_blue: 104,
+           b_magenta: 105,
+           b_cyan: 106,
+           b_white: 107  }
+
+
+  def highlight_arr
+    @highlight_arr
+  end  
+
+  #create a copy of an array to hold highlight data
+  #array should contain a length-two array for each place to highlight
+  #the first index contains FG data, the second BG data
+  def init_highlight_arr(arr)
+    @highlight_arr = arr.map do |y|
+      if y.kind_of?(Array)
+        y.map do |x|
+          x.dup
+        end
+      else
+        y.dup
+      end
+    end
+  end
+
+  def self.get_sequence(fg, bg)
+    fg = FG.fetch(fg, nil)
+    bg = BG.fetch(bg, nil)
+    if fg && bg
+      "\e[#{fg};#{bg}m"
+    else
+      "\e[#{fg}#{bg}m"
+    end
+  end
+
+  def self.esc_sequence
+    "\e[m"
+  end
+
+  def highlight(str, pos)
+    data = highlight_arr[pos[0]][pos[1]]
+    fg = data[0]
+    bg = data[1]
+
+    Highlighting.get_sequence(fg, bg) + str + Highlighting.esc_sequence
+  end
+
+  #for single operations
+  def self.highlight(str, args)
+    fg = args.fetch(:fg, nil)
+    bg = args.fetch(:bg, nil)
+
+    Highlighting.get_sequence(fg, bg) + str + Highlighting.esc_sequence
+  end
+end
+
+#Maps elements of an array to coordinates on a string
+#for easy updating
+class Map
 
   def initialize(args)
-    args = default.merge(args)
+    @arr = args.fetch(:arr)
+    
+    str = args.fetch(:str)
+    key = args.fetch(:key)
+    @delimiter = args.fetch(:delim, "\n")
+    
+    @map = create_map(@arr, str, key, @delimiter)
+    @reverse_map = @map.invert
 
-    #window variables
-    @height = args[:height]
-    @width = args[:width]
-    @top = args[:top]
-    @left = args[:left]
-    @cursor_x = 0
-    @cursor_y = 0
-    @win = CursesWrapper.new_window(args)
 
-    #subwindow variables
-    @sub_wins = []
-    @active_window = @window
+    @empty_chr = args.fetch(:empty_chr, " ")
+    @str_arr = create_str_arr(str, key)
+  
+    post_initialize(args)
+  end
+  
+  def post_initialize(args); end #for subclasses
 
-    setpos(@cursor_x, @cursor_y)
+  def create_str_arr(str, key)
+    cleaned_str = str.gsub(key, @empty_chr)
+    str_arr = str.split(@delimiter).map { |line| line.split("") }
   end
 
-  def default
-    {}
+  def create_map(arr, str, key, delim = "\n")
+    #take an array and str and create a hash that connects array positions to string positions
+
+    arr_pos = return_array_positions(arr)
+    str_pos = return_string_positions(str, key, delim)
+    map_hash = {}
+
+    arr_pos.each_index do |i|
+      map_hash[arr_pos[i]] = str_pos[i]
+    end
+      
+    return map_hash
   end
 
-  def window
-    @window
-  end
+  def return_array_positions(arr)
+    if arr.flatten == arr
+      return (0...arr.length)
+    else
+      pos_arr = []
+      arr.each_index do |y|
+        pos_arr.concat(return_array_positions(arr[y]).map { |x| [y, x] })
+      end
 
-  def addstr(str)
-    window.addstr(str)
-  end
-
-  def setpos(x, y)
-    window.setpos(x, y)
-  end
-
-  def refresh
-    window.refresh
-  end
-
-  def getch
-    window.getch
-  end
-
-  def get_char
-    window.get_char
-  end
-
-  def keypad(bool)
-    window.keypad(bool)
-  end
-
-  def close
-    window.close
-  end
- 
-  def reset_pos
-    @cursor_x = 0
-    @cursor_y = 0
-    update_cursor_pos
-  end
-
-  def up
-    if @cursor_x - 1 >= 0 
-      @cursor_x -= 1
-      update_cursor_pos
+      return pos_arr
     end
   end
 
-  def down
-    if @cursor_x + 1 <= @height
-      @cursor_x += 1
-      update_cursor_pos
+  def return_string_positions(str, key, delim = "\n")
+    pos_arr = []
+    y = 0
+    x = 0
+    str.split(delim).each do |line|
+      line.split("").each do |chr|
+      pos_arr << [y, x]  if chr == key
+      x += 1
+      end
+      y += 1
+      x = 0
+    end
+
+    return pos_arr
+  end
+
+  def arr_to_str_pos(arr_pos)
+    @map[arr_pos]
+  end
+
+  def str_to_arr_pos(str_pos)
+    @reverse_map[str_pos]
+  end
+
+  def update_str
+    @map.each_pair do |arr_pos, str_pos|
+      chr = @arr[arr_pos[0]][arr_pos[1]].to_s
+      @str_arr[str_pos[0]][str_pos[1]] = chr.length == 0 ? @empty_chr : chr
     end
   end
 
-  def left
-    if @cursor_y - 1 >= 0
-      @cursor_y -= 1
-      update_cursor_pos
+  def to_s
+    update_str
+    str = @str_arr.reduce("") { |t, l| t += l.join("").concat(@delimiter) }
+  end
+
+end
+
+class ColorMap < Map
+  include Highlighting
+
+  COLOR_CODES ||= { "b" => :black,
+                    "B" => :b_black,
+                    "r" => :red,
+                    "R" => :b_red,
+                    "g" => :green,
+                    "G" => :b_green,
+                    "y" => :yellow,
+                    "Y" => :b_yellow,
+                    "a"  => :blue,
+                    "A" => :b_blue,
+                    "m" => :magenta,
+                    "M" => :b_magenta,
+                    "c" => :cyan,
+                    "C" => :b_cyan,
+                    "w" => :white,
+                    "W" => :b_white,
+                    " " => nil }
+
+  def post_initialize(args)
+    #bg_maps are strings that map regions of a display area
+    #characters from COLOR_CODES are used
+    bg_map = args.fetch(:bg_map)
+    fg_map = args.fetch(:fg_map)
+    color_arr = create_color_arr(fg_map, bg_map)
+    init_highlight_arr(color_arr)
+  end
+
+  def create_color_arr(fg_map, bg_map)
+    fg_arr = color_map_to_arr(fg_map)
+    bg_arr = color_map_to_arr(bg_map)
+
+    color_arr = []
+    fg_arr.each_index do |y|
+      temp_row = []
+      fg_arr[y].each_index do |x|
+        temp_row << [fg_arr[y][x], bg_arr[y][x]]
+      end
+      color_arr << temp_row
     end
+
+    return color_arr
   end
 
-  def right
-    if @cursor_y <= @width
-      @cursor_y += 1
-      update_cursor_pos
-    end
+  def color_map_to_arr(map)
+    arr = map.split("\n").map do |line|
+            line.split("").map do |chr|
+              COLOR_CODES[chr]
+            end
+    end  
+
+    return arr
   end
 
-  def update_cursor_pos
-    setpos(@cursor_x, @cursor_y)
+  def colorize_str
+    str = ""
+    @str_arr.each_index do |y|
+      @str_arr[y].each_index do |x|
+        str += highlight(@str_arr[y][x], [y, x])
+      end
+      str += "\n"
+    end 
+
+    return str
   end
 
-  def begin_cursor_control
-    Curses.noecho
-    Curses.crmode
-
-    loop do
-      #responses based on input and current context
-    end
-
-  end
-
-  def begin_echo_typing
-    Curses.echo
-    Curses.nocrmode
-  end
-
-  def insert_sub_window(args)
-    p = args.fetch(:padding, 2)
-    height = args.fetch(:height, @height - p*2)
-    width = args.fetch(:width, @width - p*2)
-    top = args.fetch(:top, @top + p)
-    left = args.fetch(:left, @left + p)
-    @sub_windows << @window.subwin(height, width, top, left)
-
-    return @sub_windows.last
+  def to_s
+    update_str
+    colorize_str
   end
 end
 
@@ -355,41 +487,6 @@ class CursorMap
   end
 end
 
-
-def test
-  begin
-    Curses.init_screen
-    Curses.noecho
-    Curses.crmode
-    
-
-    win1 = create_window("Window 1", 20, 50, 5, 10)
-    Curses.refresh
-
-    win1.keypad(true)
-
-    loop do
-      input = win1.get_char.to_s
-      win1.addstr(input)
-      win1.refresh
-    end
-
-  ensure
-    Curses.echo
-    Curses.close_screen
-  end
-end
-
-
-def create_window(str, height, width, top, left)
-  win = Window.new(height: height, width: width, top: top, left: left)
-  win.setpos(height/2, width/2)
-  win.addstr(str)
-  Curses.refresh
-  win.refresh
-  return win
-end
-
 def test_board
   begin
   Curses.init_screen
@@ -422,77 +519,6 @@ def test_board
   puts "input returned from allow_cursor_movement was: #{returned_input}"
 end
 
-def log_win(height, width)
-  top = 2
-  left = (Curses.cols - width) / 2
-  win = CursesWrapper.new_window(height: height,
-                                 width:  width,
-                                 top: top,
-                                 left: left,
-                                 border_top: "-",
-                                 border_side: "|" )
-
-  win.setpos(height, 0)
-  return win
-end
-
-def create_log
-  height = 10
-  width = 40
-  win = log_win(height, width)
-  log_arr = []
-
-  log_func = ->(str) do
-    str = str.chomp.gsub(/[[:cntrl:]]/) { |m| Regexp.escape(m) } 
-    log_arr << str
-    win.setpos(0,0)
-    log_arr.last(height).each do |s|
-      disp_s = s[0...width] + "\n" 
-      win.addstr(disp_s)
-    end
-    win.refresh
-  end
-
-  return log_func
-
-end
-
-def test_refresh
-  begin
-  Curses.init_screen
-  height = 20
-  width = 20
-  mid_top = Curses.lines / 2
-  mid_left = Curses.lines / 2
-  offset = 5
-  win1 = CursesWrapper.new_window(height: height,
-                                  width: width,
-                                  top: mid_top,
-                                  left: mid_left - width - offset,
-                                  border_top: "x",
-                                  border_side: "o")
-  win2 = CursesWrapper.new_window(height: height,
-                                  width: width,
-                                  top: mid_top,
-                                  left: mid_left + offset,
-                                  border_top: "<",
-                                  border_side: "^")
-
-  win1.addstr("window 1")
-  win2.addstr("window 2")
-  win1.refresh
-  win2.refresh
-  win1.getch
-  win1.addstr("update 1")
-  win2.addstr("update 2")
-  win2.refresh
-  win1.getch
-ensure
-  Curses.close_screen
-end
-
-end
-
 def map_board(board)
 
   board_str = board.to_s #what if board had a special to_map method that returned a string with a predefined space char?
@@ -518,9 +544,95 @@ def map_board(board)
 
 end
 
+  test_str = "  a b c d e f g h   \n" +
+             "1|X X X X X X X X | \n" +
+             "2|X X X X X X X X | \n" +
+             "3|X X X X X X X X | \n" +
+             "4|X X X X X X X X | \n" +
+             "5|X X X X X X X X | \n" +
+             "6|X X X X X X X X | \n" +
+             "7|X X X X X X X X | \n" +
+             "8|X X X X X X X X | \n" + 
+             " ------------------ \n"
+   
+  bg_map =     "BBBBBBBBBBBBBBBBBBBB\n" +
+             (("BBmmwwmmwwmmwwmmwwBB\n" +
+               "BBwwmmwwmmwwmmwwmmBB\n") * 4) +
+               "BBBBBBBBBBBBBBBBBBBB\n"
+
+  fg_map =     "  wwmmwwmmwwmmwwmm  \n" +
+             (("ww                  \n" +
+               "mm                  \n") * 4 ) +
+               "                    "
+
+def test_map
+
+  test_str = "   a  b  c  d  e  f  g  h   \n" +
+             "1| X  X  X  X  X  X  X  X | \n" +
+             "2| X  X  X  X  X  X  X  X | \n" +
+             "3| X  X  X  X  X  X  X  X | \n" +
+             "4| X  X  X  X  X  X  X  X | \n" +
+             "5| X  X  X  X  X  X  X  X | \n" +
+             "6| X  X  X  X  X  X  X  X | \n" +
+             "7| X  X  X  X  X  X  X  X | \n" +
+             "8| X  X  X  X  X  X  X  X | \n" + 
+             " -------------------------- \n"
+   
+  bg_map =     "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" +
+             (("bbMMMWWWMMMWWWMMMWWWMMMWWWbb\n" +
+               "bbWWWMMMWWWMMMWWWMMMWWWMMMbb\n") * 4) +
+               "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
+
+  fg_map =     "  WWWMMMWWWMMMWWWMMMWWWMMM  \n" +
+             (("WW                          \n" +
+               "MM                          \n") * 4 ) +
+               "                            "
+  pieces = Pieces.new_set("white").concat(Pieces.new_set("black"))
+  board = Board.new
+  pieces.each { |p| p.add_to_board(board) }
+
+  arr = board.arr 
+ 
+  test_color_map = ColorMap.new(arr: arr, str: test_str, key: "X", bg_map: bg_map, fg_map: fg_map)
+
+  bg_map = bg_map.gsub("M", "A")
+  fg_map = fg_map.gsub("M", "A")
+  color_map_v2 = ColorMap.new(arr: arr, str: test_str, key: "X", bg_map: bg_map, fg_map: fg_map)
+
+  bg_map = bg_map.gsub("A", "R")
+  fg_map = fg_map.gsub("A", "R")
+  color_map_v3 = ColorMap.new(arr: arr, str: test_str, key: "X", bg_map: bg_map, fg_map: fg_map)
+  
+  bg_map = bg_map.gsub("R", "C")
+  fg_map = fg_map.gsub("R", "C")
+  color_map_v4 = ColorMap.new(arr: arr, str: test_str, key: "X", bg_map: bg_map, fg_map: fg_map)
+
+  bg_map = bg_map.gsub("C", "Y")
+  fg_map = fg_map.gsub("C", "Y")
+  color_map_v5 = ColorMap.new(arr: arr, str: test_str, key: "X", bg_map: bg_map, fg_map: fg_map)
+  
+  bg_map = bg_map.gsub("Y", "G")
+  fg_map = fg_map.gsub("Y", "G")
+  color_map_v6 = ColorMap.new(arr: arr, str: test_str, key: "X", bg_map: bg_map, fg_map: fg_map)
+
+
+
+  puts test_color_map
+  gets
+  puts color_map_v2
+  gets
+  puts color_map_v3
+  gets
+  puts color_map_v4
+  gets
+  puts color_map_v5
+  gets
+  puts color_map_v6
+
+end
 
 if __FILE__ == $0
 
-  test_board
+  test_map
 
 end
