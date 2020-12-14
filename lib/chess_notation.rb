@@ -1,4 +1,4 @@
-require 'chess'
+require './lib/chess.rb'
 
 module ChessNotation
 

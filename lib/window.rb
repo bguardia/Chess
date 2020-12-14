@@ -1,8 +1,11 @@
 require 'pry'
 require 'curses'
+require './lib/chess.rb'
 require './lib/game.rb'
 require './lib/board.rb'
 require './lib/piece.rb'
+
+$debug_log = ""
 
 module Keys
 
@@ -17,68 +20,50 @@ module Keys
 
 end
 
-module KeyMapping
-
-  @stop_receiving_input = false
-
-  #methods mapped to each key should be defined in each class
-  def to_up; end
-  def to_down; end
-  def to_left; end
-  def to_right; end
-  def on_enter; end
-  def on_backspace; end
-  
-  def on_escape
-    @stop_receiving_input = true
+module InteractiveWindow
+  #A module that allows an input source to interactive with input handler
+  #The default methods are an example of using $stdin
+  def interactive
+    true
   end
 
-  def default_mapping
-    { Keys::UP => -> { to_up },
-      Keys::DOWN => -> { to_down },
-      Keys::LEFT  => -> { to_left },
-      Keys::RIGHT => -> { to_right },
-      Keys::ENTER => -> { on_enter },
-      Keys::BACKSPACE => -> { on_backspace },
-      Keys::ESCAPE => -> { on_escape } }
+  #Stores any special keys used by a paticular context
+  #(Will be over-ridden by arguments passed to input_handler)
+  def key_map
+    {}
   end
 
-  #break_condition should return true when ready to stop receiving input
+  #Called during InputHandler's get_input loop
+  def before_get_input; end
+  def post_get_input; end
+  def get_input
+    @input_to_return = gets.chomp #Wrap gets or win.getch so other objects don't need to know the difference
+  end
+
+  #Method to handle returned input if the input is not a special character
+  def return_input(input); end
+
   def break_condition
-    @stop_receiving_input
+    true #Because gets.chomp returns input as soon as entered is pressed, loop should automatically break
   end
 
-  def receive_input(win, key_mapping = {})
-    key_mapping = default_mapping.merge(key_mapping)
-    win.keypad(true)
-    before_receive_input
+  #Add new context based on key press
+  def update_key_map; end
 
-    loop do
-      input = win.getch
-      if key_mapping.has_key?(input)
-        key_mapping[input].call
-      end
-
-      break if break_condition
-    end 
-
-    win.keypad(false)
-    post_receive_input 
-    return return_input
+  #A way for window/io to return its input
+  def return_input
+    @input_to_return
   end
-
-  #add in any declarations that should be made before/after the input loop in the following methods
-  def before_receive_input; end
-  def post_receive_input; end
-  def return_input; end
 end
 
-
+#A screen holds information about and manages all windows. 
 class Screen
   
   def initialize(args)
+    @active_region = nil
     @regions = []
     @win = CursesWrapper.new_window(args)
+    post_initialize(args)
   end
 
   def add_region(rgn)
@@ -86,18 +71,103 @@ class Screen
     w = rgn.width
     t = rgn.top
     l = rgn.left
-    rgn.set_win(@win.subwin(h,w,t,l))
+    
+    rgn.set_win(CursesWrapper.new_window(height: h,
+                                         width: w,
+                                         top: t,
+                                         left: l))
     rgn.update
     @regions << rgn
   end
 
   def update
-    @regions.each { |rgn| rgn.update }
     @win.refresh
+    @regions.each { |rgn| rgn.update }
   end
 
-  def gets
+  def get_input
     @win.getch
+  end
+
+end
+
+class InteractiveScreen < Screen
+  include InteractiveWindow
+
+  def post_initialize(args)
+    @active_region = nil
+    @break = false
+  end
+
+  def interactive_rgns
+    @regions.filter { |r| r.respond_to?(:interactive) }
+  end
+
+  def change_active_rgn
+    interactive = interactive_rgns
+    l = interactive.length
+    i = interactive.index(@active_region)
+    
+    #If active region has not been previously set,
+    #set first interactive window as active. Otherwise choose next 
+    #window in array (wraps around).
+    if l == 0
+      @active_region = nil 
+    elsif i.nil?
+      @active_region = interactive.first
+      @active_region.before_get_input
+    else
+      next_i = (i + 1) % l
+      @active_region.post_get_input
+      @active_region = interactive[next_i]
+      @active_region.before_get_input
+    end
+
+    return @active_region
+  end
+
+  def update_input_environment
+
+  end
+
+  def active_region
+    @active_region ||= change_active_rgn
+  end
+
+  def before_get_input
+    active_region.before_get_input
+  end
+
+  def post_get_input
+    active_region.post_get_input
+  end
+
+  def get_input
+    active_region.get_input
+  end
+
+  def break_condition
+    active_region.break_condition
+  end
+
+  def key_map
+    map = { Keys::TAB =>-> { change_active_rgn },
+            Keys::ESCAPE => -> { @break = true }}
+    if active_region  
+      map.merge(active_region.key_map)
+    end 
+  end
+
+  def update_key_map
+    key_map
+  end
+
+  def handle_unmapped_input(input) 
+    active_region.handle_unmapped_input(input)
+  end
+
+  def return_input
+    active_region.return_input
   end
 end
 
@@ -230,6 +300,10 @@ module Highlighting
     return pair_num
   end
 
+  def return_c_pair(fg, bg)
+    color_pair = c_color_pairs.fetch([fg, bg], nil) || new_c_pair([fg, bg])
+  end
+
   #Highlights a single character or row of characters with curses
   def c_highlight(win, chr, pos)
     data = highlight_arr[pos[0]][pos[1]]
@@ -249,6 +323,19 @@ module Highlighting
         c_highlight(win, str_arr[y][x], [y, x])
       end
     end
+  end
+
+  def curses_fill(win, height, width, c_arr, chr = " ")
+    color_pair = c_color_pairs.fetch(c_arr, nil) || new_c_pair(c_arr)
+    
+    win.setpos(0,0)
+    win.attron(Curses.color_pair(color_pair))
+    height.times do
+      width.times do
+        win.addch(chr)
+      end
+    end
+    win.attroff(Curses.color_pair(color_pair))
   end
 
   #create a copy of an array to hold highlight data
@@ -539,8 +626,216 @@ class ColorMap < Map
   end
 end
 
+class Menu
+  include InteractiveWindow
+  include Highlighting
+
+  def initialize(args)
+    @options = args.fetch(:options) #a 2D array containing a string to display and a lambda to call = ["Start Game", ->{ game_start}]
+    @pos_y = 0
+
+    @selected_col = args.fetch(:col2, nil)
+    @unselected_col = args.fetch(:col1, nil)
+
+    @height = args.fetch(:height, nil) || @options.length
+    @width = args.fetch(:width)
+    @top = args.fetch(:top)
+    @left = args.fetch(:left)
+
+    @win = args.fetch(:window, nil) || CursesWrapper.new_window(height: @height, width: @width, top: @top, left: @left)
+    update
+  end
+
+  def set_win(win)
+    @win = win
+  end
+
+  def to_up
+    if @pos_y - 1 >= 0
+      @pos_y -= 1
+    end
+    $debug_log += "called to_up\n"
+    update
+  end
+
+  def to_down
+    if @pos_y + 1 <= @options.length - 1
+      @pos_y += 1
+    end
+    $debug_log += "called to_down\n"
+    update
+  end 
+
+  def active
+    $debug_log += "active is: #{@options[@pos_y]}"
+    @options[@pos_y]
+  end
+
+  def update
+    $debug_log += "called update"
+    i = 0
+    @options.length.times do
+      if i == @pos_y
+        col = @selected_col
+      else
+        col = @unselected_col 
+      end
+
+      c_num = return_c_pair(col[0], col[1])
+      @win.attron(Curses.color_pair(c_num))
+      @win.setpos(i, 0)
+      @win.addstr(@options[i][0].ljust(@width))
+      @win.attroff(Curses.color_pair(c_num))
+      i += 1
+    end
+    @win.refresh
+  end
+
+  def select
+    $debug_log += "called select\n"
+    @break = true
+    active[1].call
+  end
+
+  def key_map
+    { Keys::UP => -> { to_up },
+      Keys::DOWN => -> { to_down },
+      Keys::ENTER => -> { select }}
+  end
+
+  def before_get_input
+    Curses.noecho
+    Curses.curs_set(0)
+    @win.keypad(true)
+  end
+
+  def get_input
+    @win.getch
+  end
+
+  def break_condition
+    @break
+  end
+
+  def post_get_input
+    @win.keypad(false)
+    Curses.echo
+    Curses.curs_set(1)
+  end
+end
+
+
+class TypingField
+ include InteractiveWindow
+ include Highlighting
+
+ def initialize(args)
+   @height = args.fetch(:height, 1)
+   @width = args.fetch(:width)
+   @top = args.fetch(:top)
+   @left = args.fetch(:left)
+   @bg = args.fetch(:bg, nil) #colors should be passed as symbols used in Highlighting
+   @fg = args.fetch(:fg, nil)
+   @win = nil
+   @input_to_return = "" 
+   @break = false
+ end
+
+ def height
+   @height
+ end
+
+ def width
+   @width
+ end
+
+ def top
+   @top
+ end
+
+ def left
+   @left
+ end
+
+ def set_win(win)
+   @win = win
+   set_color
+ end
+
+ def set_color
+   $debug_log += "called set_color\n"
+   col = Curses.color_pair(return_c_pair(@fg, @bg))
+   @win.attron(col)
+   @win.setpos(0,0)
+   @win.addstr(@input_to_receive.to_s.ljust(@width))
+   @win.attroff(col)
+   @win.setpos(0,0)
+   @win.touch
+   @win.refresh
+ end
+
+ def key_map
+   {Keys::ENTER => -> { @break = true},
+    Keys::BACKSPACE => -> { on_backspace }}
+ end
+
+ def on_backspace
+   y = @win.cury
+   x = @win.curx
+   if x > 0 || y > 0
+     if x == 0 && y > 0
+       y -= 1
+       x = @width
+     else
+       x -= 1
+     end
+
+     @win.setpos(y, x)
+     @win.delch
+     @input_to_return = @input_to_return.slice(0, @input_to_return.length - 1)
+     update
+   end
+ end
+
+ def break_condition
+   @break
+ end
+
+ def before_get_input
+   @input_to_return = ""
+   Curses.noecho
+   @win.keypad(true)
+   @win.setpos(0,0)
+   @win.attron(Curses.color_pair(return_c_pair(@fg, @bg))) 
+ end
+
+ def get_input
+   chr = @win.getch
+ end
+
+ def handle_unmapped_input(input)
+   #don't echo or add characters to input if there is no space remaining in field
+   if @win.curx < @width -1
+     @win.addch(input) 
+     @input_to_return += input.to_s
+   end
+ end
+
+ def post_get_input
+   @win.attroff(Curses.color_pair(return_c_pair(@fg, @bg)))
+   Curses.echo
+   @win.keypad(false)
+   @win.erase
+ end
+
+ def update
+  @win.refresh
+ end
+
+end
+
 class CursorMap < Map
-  include KeyMapping
+  include InteractiveWindow
 
   def post_initialize(args)
     @pos_x = 0
@@ -554,6 +849,15 @@ class CursorMap < Map
     update_cursor_pos
   end
 
+  def key_map
+    { Keys::UP => -> { to_up },
+      Keys::DOWN => -> { to_down },
+      Keys::LEFT => -> { to_left },
+      Keys::RIGHT => -> { to_right},
+      Keys::ENTER => -> { on_enter },
+      Keys::BACKSPACE => -> { on_backspace }}
+  end
+
   def to_up
     if pos_exist?(@pos_y - 1, @pos_x)
       @pos_y -= 1
@@ -562,7 +866,7 @@ class CursorMap < Map
   end
 
   def to_down
-    if pos_exist?(@pos_y + 1, @pos_x)
+     if pos_exist?(@pos_y + 1, @pos_x)
       @pos_y += 1
       update_cursor_pos
     end
@@ -615,17 +919,20 @@ class CursorMap < Map
   end
 
   def get_input
-    receive_input(@win)
+    @win.getch
   end
 
-  def before_receive_input
+  def before_get_input
+    update_cursor_pos
     @input_to_return = nil
     @stored_input = nil
     Curses.noecho
-    Curses.crmode
+    Curses.cbreak
+    @win.keypad(true)
   end
 
-  def post_receive_input
+  def post_get_input
+    @win.keypad(false)
   end
 
   def return_input
@@ -788,21 +1095,31 @@ begin
 
   Curses.init_screen
   Curses.start_color
-  screen = Screen.new(height: 20, width: 40, top: 10, left: 10)
+  screen = InteractiveScreen.new(height: 20, width: 40, top: 10, left: 10)
 
-
+  field = TypingField.new(height: 1, width: 18, top: 24, left: 12, fg: :magenta, bg: :white)
   test_color_map = CursorMap.new(top: 12, left: 12, arr: arr, str: test_str, key: "X", bg_map: bg_map, fg_map: fg_map)
-  
-  screen.add_region(test_color_map)
+  bg_map = bg_map.gsub("M", "C")
+  fg_map = fg_map.gsub("M", "C")
+  map_two = CursorMap.new(top: 12, left: 40, arr: arr, str: test_str, key: "X", bg_map: bg_map, fg_map: fg_map)
 
-  screen.gets
+  inputgetter = InputHandler.new(in:screen)
+
+  screen.add_region(field)
+  screen.add_region(map_two)
+  screen.add_region(test_color_map)
+  screen.update
+  
 
   board.move(pieces.first, [3,3])
   screen.update
-  test_color_map.get_input
+  returned_input = inputgetter.get_input
 ensure
   Curses.close_screen
+  puts $debug_log
 end
+
+  puts "returned input was: #{returned_input}"
 end
 
 def test_cursor_map
@@ -840,6 +1157,106 @@ def test_cursor_map
   puts "cursor_map's instance variables are:\n#{cursor_map.instance_variables}"
   puts "cursor_map.to_s returns:\n#{cursor_map.to_s}"
 end
+
+def test_field
+begin
+  Curses.init_screen
+  Curses.start_color
+
+  h = 2
+  w = 10
+  t = 12
+  l = 12
+  field = TypingField.new(height: h, width: w, top: t, left: l, fg: :magenta, bg: :white)
+
+  win = CursesWrapper.new_window(height: h, width: w, top: t, left: l)
+  field.set_win(win)
+  win.setpos(0,0)
+  field.get_input
+ensure
+  Curses.close_screen
+end
+end
+
+def test_color_set
+begin
+  Curses.init_screen
+  Curses.start_color
+  Curses.init_pair(1, Curses::COLOR_MAGENTA, Curses::COLOR_WHITE)
+  h = 10
+  w = 20
+  win = Curses::Window.new(h, w, 12, 12)
+
+  win.color_set(1)
+
+  h.times do
+    w.times do
+      win.addch(" ")
+    end
+  end
+  win.refresh
+
+  win.setpos(0,0)
+  win.getstr
+ensure
+  Curses.close_screen
+end
+end
+
+def my_game
+  Curses.close_screen
+  puts "starting game!"
+end
+
+def see_rules
+  Curses.close_screen
+  puts "Here are some rules!"
+end
+
+def load_game
+  Curses.close_screen
+  puts "Choose a game to load..."
+end
+
+def quit
+  Curses.close_screen
+  puts "you quit the game!"
+end
+
+def test_menu
+begin
+  Curses.init_screen
+  Curses.start_color
+
+  h = 5
+  w = 20
+  t = 12
+  l = 12
+
+  options = [ ["Start game", -> { my_game }],
+              ["Check rules", -> {see_rules}],
+              ["Load game", -> { load_game }],
+              ["Quit", -> { quit }]]
+
+
+  my_menu = Menu.new(height: h,
+                     width: w,
+                     top: t,
+                     left: l,
+                     options: options,
+                     col1: [:white, :black],
+                     col2: [:red, :yellow])
+
+
+  inputgetter = InputHandler.new(in: my_menu)
+
+  inputgetter.get_input
+ensure
+  Curses.close_screen
+end
+
+end
+
 
 if __FILE__ == $0
 
