@@ -14,23 +14,27 @@ def pop_up(str)
   t = Curses.lines / 2
   l = Curses.cols / 2
 
-  win = CursesWrapper.new_window(height: h,
-                                 width:  w,
-                                 top: t,
-                                 left: l,
-                                 border_top: "-",
-                                 border_side: "|")
+  win = Window.new(height: h,
+                   width:  w,
+                   top: t,
+                   left: l,
+                   border_top: "-",
+                   border_side: "|")
 
-  win.setpos(padding, padding)
   win.addstr(str)
-  input = win.getch
-  win.erase
+  input = win.get_input
+  win.close
   Curses.refresh
   return input
 end
 
 def start_game
-  game_screen = InteractiveScreen.new(height: 40, width: 80, top: 0, left: 0)
+  height = 40 + 2 < Curses.lines ? 40 : 30 
+  width = 80 + 2 < Curses.cols ? 80 : 60
+  padding = 2
+  top = (Curses.lines - height) / 2
+  left = (Curses.cols - width) / 2
+  game_screen = InteractiveScreen.new(height: height, width: width, top: top, left: left, padding: padding)
   game_input_handler = InputHandler.new(in: game_screen)
   board = Board.new
   board_map = get_board_map(board)
@@ -87,16 +91,21 @@ def start_menu
   w = 40
   t = Curses.lines / 2
   l = Curses.cols / 2
-  options = [["Start game", ->{start_game}],
-             ["Load save", ->{load_save}],
-             ["Quit game", ->{quit_game}],
-             ["About the game", ->{about_game}]]
+  content = ["Start game",
+             "Load save",
+             "Quit game",
+             "About the game"]
 
+  actions = [-> {start_game},
+             -> {load_save},
+             -> {quit_game},
+             -> {about_game}]
   Menu.new(height: h,
            width: w,
            top: t,
            left: l,
-           options: options,
+           content: content,
+           actions: actions,
            col1: [:white, :black],
            col2: [:white, :cyan])
 end

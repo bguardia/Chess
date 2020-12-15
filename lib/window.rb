@@ -59,17 +59,162 @@ module InteractiveWindow
   end
 end
 
-#A screen holds information about and manages all windows. 
-class Screen
+class Window
+
+  def initialize(args)   
+    @padding = args.fetch(:padding, 0)
+    @padding_left = args.fetch(:padding_left, nil) || @padding
+    @padding_right = args.fetch(:padding_right, nil) || @padding
+    @padding_top = args.fetch(:padding_top, nil) || @padding
+    @padding_bottom = args.fetch(:padding_bottom, nil) || @padding
+    
+    @content = args.fetch(:content, nil)
+    
+    @height = args.fetch(:height, nil) || determine_height_of(@content) + @padding_top + @padding_bottom
+    @width = args.fetch(:width, nil) || determine_width_of(@content) + @padding_left + @padding_right
+    @top = args.fetch(:top, 0)
+    @left = args.fetch(:left, 0)
   
-  def initialize(args)
-    @active_region = nil
-    @regions = []
-    @win = CursesWrapper.new_window(args)
+    @border_top = args.fetch(:border_top, nil)
+    @border_side = args.fetch(:border_side, nil)
+
+    $window_debug += "Initializing #{self.class}:\n@height: #{@height}\n" +
+                     "@width: #{@width}\n@top: #{@top}\n@left: #{@left}\n" +
+                     "@padding: #{@padding}\n@padding_left: #{@padding_left}\n" +
+                     "@padding_right: #{@padding_right}\n@padding_top: #{@padding_top}\n" +
+                     "@padding_bottom: #{@padding_bottom}\n"
+
+    @border_win = nil #encapsulating window with border + padding
+    @win = create_win #window to handle output
+
+    $window_debug += "Initialized window.\n@border_win: #{@border_win}\n" +
+                     "@win: #{@win}\n"
+
     post_initialize(args)
   end
 
+  private
+  def post_initialize(args); end
+
+  private
+  def determine_height_of(content = @content)
+    return 1 if content.nil?
+
+    if content.kind_of?(Array)
+      if content.flatten == @content
+        return 1
+      else
+        return content.length
+      end
+    else
+      return content.split("\n").length
+    end
+  end
+
+  private
+  def determine_width_of(content = @content)
+    return 1 if content.nil?
+
+    if content.kind_of?(Array)
+      if content.flatten == @content
+        return content.length
+      else
+        return content.first.length
+      end
+    else
+      arr = content.split("\n")
+      max_width = arr.reduce(0) do |max, s|
+        if s.length > max
+          s.length
+        else
+          max
+        end
+      end
+
+      return max_width 
+    end
+  end
+
+  public
+  def height
+    @height
+  end
+
+  def width
+    @width
+  end
+
+  def top
+    @top
+  end
+
+  def left
+    @left
+  end
+
+  def border_top
+    @border_top
+  end
+
+  def border_side
+    @border_side
+  end
+
+  def set_win(win)
+    @win = win
+  end
+
+  def addstr(str)
+    if @content.nil?
+      @content = ""
+    end
+    @content += str
+    @win.setpos(0,0)
+    @win.addstr(@content)
+  end
+
+  def get_input
+    @win.getch  
+  end
+
+  def close
+    @win.close
+  end
+
+  def create_win
+    @border_win = Curses::Window.new(@height, @width, @top, @left)
+    
+    if border_top && border_side
+      @border_win.box(border_top, border_side)
+    end
+    @border_win.refresh
+
+    h = @height - @padding_top - @padding_bottom
+    w = @width - @padding_left - @padding_right
+    t = @top + @padding_top
+    l = @left + @padding_left
+    win = @border_win.subwin(h, w, t, l)
+    win.refresh
+    return win
+  end
+
+  def update
+      @win.refresh
+  end
+end
+
+#A screen holds information about and manages all windows. 
+class Screen < Window
+  
+  def post_initialize(args)
+    @regions = []
+    post_post_initialize(args)
+  end
+
+  def post_post_initialize(args); end
+
   def add_region(rgn)
+=begin
     h = rgn.height
     w = rgn.width
     t = rgn.top
@@ -79,17 +224,16 @@ class Screen
                                          width: w,
                                          top: t,
                                          left: l))
-    rgn.update
+=end
     @regions << rgn
   end
 
   def update
-    @win.refresh
     @regions.each { |rgn| rgn.update }
   end
 
   def get_input
-    @win.getch
+    #@win.getch
   end
 
 end
@@ -97,7 +241,7 @@ end
 class InteractiveScreen < Screen
   include InteractiveWindow
 
-  def post_initialize(args)
+  def post_post_initialize(args)
     @active_region = nil
     @break = false
   end
@@ -138,7 +282,7 @@ class InteractiveScreen < Screen
   end
 
   def before_get_input
-    update
+    #update
     active_region.before_get_input
   end
 
@@ -449,35 +593,21 @@ end
 
 #Maps elements of an array to coordinates on a string
 #for easy updating
-class Map
+class Map < Window
   include Highlighting
   
-  def initialize(args)
+  def post_initialize(args)
     #Set up array and array map
     @arr = args.fetch(:arr)
-    str = args.fetch(:str)
+    str = args.fetch(:content)
     key = args.fetch(:key)
     @delimiter = args.fetch(:delim, "\n")
     @map = create_map(@arr, str, key, @delimiter)
     @reverse_map = @map.invert
+
     #Remove keys from string and create string array
     @empty_chr = args.fetch(:empty_chr, " ")
-    @str_arr = create_str_arr(str, key)
-    #Calculate total size of map
-    @height = @str_arr.length
-    @width = @str_arr.first.length
-
-    #Optional arguments for desired coordinates
-    #and window object.
-    #Window may be set later, allowing it to become a subwindow of a
-    #larger window/screen.
-    @top = args.fetch(:top, 0)
-    @left = args.fetch(:left, 0) 
-    
-    if args.fetch(:window, false)
-      args = args.merge({ height: @height, width: @width })
-      @win = CursesWrapper.new_window(args)
-    end
+    @str_arr = @content = create_str_arr(str, key)
 
     #Optional settings for a color map
     #See highlighting module for more info
@@ -485,39 +615,19 @@ class Map
       set_color_map(args)
     end
 
-    post_initialize(args)
+    $window_debug += "#{self.class}.new) returned from super(args)"
+    post_post_initialize(args)
   end
-  
-  public
-  def set_win(win)
-    @win = win
-  end
-
-  def height
-    @height
-  end
-
-  def width
-    @width
-  end
-
-  def top
-    @top
-  end
-
-  def left
-    @left
-  end
-
+ 
+  private  
+  def post_post_initialize(args); end #for subclasses
+ 
   def set_color_map(args)
     bg_map = args.fetch(:bg_map)
     fg_map = args.fetch(:fg_map)
     color_arr = create_color_arr(fg_map, bg_map)
     init_highlight_arr(color_arr)
   end
-
-  private  
-  def post_initialize(args); end #for subclasses
 
   def create_str_arr(str, key)
     cleaned_str = str.gsub(key, @empty_chr)
@@ -585,10 +695,13 @@ class Map
 
   def update_logic 
     return nil unless @win
+    $window_debug += "#{self.class}.update_logic) @win exists\n"
     if highlight_arr
+      $window_debug += "highlight_arr exists\n"
       update_str
       curses_colorize_str(@win, @str_arr)  
     else
+      $window_debug += "highlight_arr doesn't exist\n"
       str = to_s
       @win.setpos(0,0)
       @win.addstr(str)
@@ -600,6 +713,7 @@ class Map
     $window_debug += "called #{self.class}.update.\n"
     update_logic
     return nil unless @win
+    #@border_win.refresh
     @win.refresh
     $window_debug += "#{self.class} after update is:\n#{to_s}"
     $window_debug += "@arr.object_id is: #{@arr.object_id}"
@@ -615,62 +729,46 @@ class Map
   end
 end
 
-class ColorMap < Map
+class List < Window
   include Highlighting
 
   def post_initialize(args)
-    #bg_maps are strings that map regions of a display area
-    #characters from COLOR_CODES are used
-    bg_map = args.fetch(:bg_map)
-    fg_map = args.fetch(:fg_map)
-    color_arr = create_color_arr(fg_map, bg_map)
-    init_highlight_arr(color_arr)
+    @col_arr = args.fetch(:color_arr, nil) || [[:white, :black]]
   end
 
-  def to_s
-    update_str
-    curses_colorize_str
+  def post_post_initialize(args); end
+
+  def update
+    to_print = @content.length > @height ? @content[-@height...@content.length] : @content
+    y = 0
+    to_print.each do |line|
+      @win.setpos(y,0)
+      c_pair = get_line_color(y)
+      c_num = return_c_pair(c_pair[0], c_pair[1]) 
+      col = Curses.color_pair(c_num)
+      @win.attron(col)
+      @win.addstr(line.ljust(@width))
+      @win.attroff(col)
+      y += 1
+    end
+  end
+
+  def get_line_color(line_num)
+    i = line_num % (@col_arr.length - 1)
+    @col_arr[i]
   end
 end
 
-class Menu
+class Menu < List
   include InteractiveWindow
   include Highlighting
 
-  def initialize(args)
-    @options = args.fetch(:options) #a 2D array containing a string to display and a lambda to call = ["Start Game", ->{ game_start}]
+  def post_initialize(args)
+    @actions = args.fetch(:actions) #a 2D array containing a string to display and a lambda to call = ["Start Game", ->{ game_start}]
     @pos_y = 0
-
     @selected_col = args.fetch(:col2, nil)
     @unselected_col = args.fetch(:col1, nil)
-
-    @height = args.fetch(:height, nil) || @options.length
-    @width = args.fetch(:width)
-    @top = args.fetch(:top)
-    @left = args.fetch(:left)
-
-    @win = args.fetch(:window, nil) || CursesWrapper.new_window(height: @height, width: @width, top: @top, left: @left)
     update
-  end
-
-  def set_win(win)
-    @win = win
-  end
-
-  def height
-    @height
-  end
-
-  def width
-    @width
-  end
-
-  def top
-    @top
-  end
-
-  def left
-    @left
   end
 
   def to_up
@@ -681,39 +779,28 @@ class Menu
   end
 
   def to_down
-    if @pos_y + 1 <= @options.length - 1
+    if @pos_y + 1 <= @content.length - 1
       @pos_y += 1
     end
     update
   end 
 
   def active
-    @options[@pos_y]
+    @actions[@pos_y]
   end
 
-  def update
-    i = 0
-    @options.length.times do
-      if i == @pos_y
-        col = @selected_col
-      else
-        col = @unselected_col 
-      end
-
-      c_num = return_c_pair(col[0], col[1])
-      @win.attron(Curses.color_pair(c_num))
-      @win.setpos(i, 0)
-      @win.addstr(@options[i][0].ljust(@width))
-      @win.attroff(Curses.color_pair(c_num))
-      i += 1
+  def get_line_color(line_num)
+    if line_num == @pos_y
+      col = @selected_col
+    else
+      col = @unselected_col 
     end
-    @win.refresh
   end
 
   def select
     @break = true
     @win.erase
-    active[1].call
+    active.call
   end
 
   def key_map
@@ -738,47 +825,20 @@ class Menu
 
   def post_get_input
     @win.keypad(false)
-    Curses.echo
     Curses.curs_set(1)
   end
 end
 
 
-class TypingField
+class TypingField < Window
  include InteractiveWindow
  include Highlighting
 
- def initialize(args)
-   @height = args.fetch(:height, 1)
-   @width = args.fetch(:width)
-   @top = args.fetch(:top)
-   @left = args.fetch(:left)
+ def post_initialize(args)
    @bg = args.fetch(:bg, nil) #colors should be passed as symbols used in Highlighting
    @fg = args.fetch(:fg, nil)
-   @win = nil
    @input_to_return = "" 
    @break = false
- end
-
- def height
-   @height
- end
-
- def width
-   @width
- end
-
- def top
-   @top
- end
-
- def left
-   @left
- end
-
- def set_win(win)
-   @win = win
-   set_color
  end
 
  def set_color
@@ -844,6 +904,7 @@ class TypingField
    Curses.echo
    @win.keypad(false)
    @win.erase
+   @win.refresh
  end
 
  def update
@@ -855,10 +916,11 @@ end
 class CursorMap < Map
   include InteractiveWindow
 
-  def post_initialize(args)
+  def post_post_initialize(args)
     @pos_x = 0
     @pos_y = 0
     @stored_input = nil
+    $window_debug += "#{self.class}.post_initialize called."
   end
  
   def reset_pos
@@ -942,6 +1004,7 @@ class CursorMap < Map
 
   def before_get_input
     update_cursor_pos
+    @win.redraw
     @input_to_return = nil
     @stored_input = nil
     Curses.noecho
@@ -964,37 +1027,6 @@ class CursorMap < Map
 
 end
 
-def test_board
-  begin
-  Curses.init_screen
-  board = Board.new
-  height = 9
-  width = 21 
-  padding = 2
-  top = (Curses.lines - (height)) / 2
-  left = (Curses.cols - (width)) / 2
-  cursmap = CursorMap.new(height: height,
-                      width: width,
-                      top: top, 
-                      left: left,
-                      border_top: "-",
-                      border_side: "|",
-                      padding: 5,
-                      min_x: 2,
-                      min_y: 1,
-                      max_x: 2 + (7*2),
-                      max_y: height,
-                      x_incr: 2,
-                      displayed: board)
-
-  cursmap.update_display
-  returned_input = cursmap.receive_input(cursmap.window)
-  ensure
-  Curses.close_screen
-  end
-
-  puts "input returned from allow_cursor_movement was: #{returned_input}"
-end
 
   test_str = "  a b c d e f g h   \n" +
              "1|X X X X X X X X | \n" +
@@ -1166,7 +1198,15 @@ def get_board_map(board)
                "                            "
   arr = board.arr 
  
-  board_map = CursorMap.new(top: 12, left: 12, arr: arr, str: board_str, key: "X", bg_map: bg_map, fg_map: fg_map)
+  top = (Curses.lines - board.arr.length) /2
+  left = (Curses.cols - board.arr.first.length) /2
+  board_map = CursorMap.new(top: top, 
+                            left: left, 
+                            arr: arr, 
+                            content: board_str, 
+                            key: "X", 
+                            bg_map: bg_map, 
+                            fg_map: fg_map)
 
 end
 
