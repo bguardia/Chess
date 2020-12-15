@@ -1,6 +1,8 @@
 require './lib/chess.rb'
 require 'json'
 
+$pieces_debug = ""
+
 module Movement
 
   #create a new MovementArray originating at the current_pos
@@ -265,6 +267,12 @@ module Movement
     return false
   end
 
+  def self.possible_move?(piece, move, board, args = {})
+    moves = Movement.get_possible_moves(piece, board, true)
+    return false if moves.empty?
+    return moves.include?(move)
+  end
+
   def self.who_can_reach?(space, board, args = {})
     pieces = board.get_pieces(args)
     pieces.filter! do |piece|
@@ -310,11 +318,11 @@ module Movement
 
     king_pos = king.current_pos
 
-    puts "king's position is: #{king_pos}"
+    $pieces_debug+=  "king's position is: #{king_pos}"
 
     enemy_pieces.any? do |piece|
-      puts "piece: #{piece}"
-      puts "possible_moves: #{piece.possible_moves}"
+      $pieces_debug+=  "piece: #{piece}"
+      $pieces_debug+=  "possible_moves: #{piece.possible_moves}"
       piece.possible_moves.include?(king_pos)
     end
   end
@@ -324,20 +332,20 @@ module Movement
 
     pieces = board.get_pieces(team: king.team)
 
-    puts "pieces on king's team:"
-    pieces.each { |p| puts p }
+    $pieces_debug+=  "pieces on king's team:"
+    pieces.each { |p| $pieces_debug+=  p }
 
     pieces.all? do |piece|
-      puts "current piece: #{piece.class}"
+      $pieces_debug+=  "current piece: #{piece.class}"
       piece.possible_moves.all? do |move|
-        puts ">current_move: #{move}"
+        $pieces_debug+=  ">current_move: #{move}"
         #simulate move, check for check
         #if not check, it is not checkmate
         board.move(piece, move)
         in_check = in_check?(king, board)
-        puts "in_check?: #{in_check}"
+        $pieces_debug+=  "in_check?: #{in_check}"
         board.rewind(1)
-        puts board
+        $pieces_debug+=  board
         in_check
       end
     end

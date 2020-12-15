@@ -2,6 +2,7 @@ require './lib/piece.rb'
 require './lib/player.rb'
 require 'json'
 
+$game_debug = ""
 
 class Game
 
@@ -10,8 +11,13 @@ class Game
  def initialize(args = {})
    @players = args.fetch(:players, false) || create_players
    @sets = args.fetch(:sets, false) || create_sets
-   @board = Board.new
+   @board = args.fetch(:board, false) || Board.new 
    @current_player = nil
+   @io_stream = args.fetch(:io)
+   @msg_arr = [] 
+   $game_debug += "Game initialized with the following variables:\n" +
+                  "@players: #{@players}\n@sets: #{@sets}\n@board:\n" +
+                  "#{@board}\n"
  end
 
  def create_players
@@ -22,6 +28,15 @@ class Game
    [ Pieces.new_set("white"), Pieces.new_set("black") ]
  end
 
+ def set_up_board
+   @sets.each do |set|
+     set.each do |piece|
+       piece.add_to_board(@board)
+     end
+   end
+   board.update_gamestate
+ end
+
  def to_json
    JSON.dump({ :players => @players.map(&:to_json),
                    :sets => @sets.map { |set| set.map(&:to_json) },
@@ -29,15 +44,42 @@ class Game
  end
 
  def game_over?
-   @players.each do |player|
-     king = @board.get_pieces(type: "King", team: player.team)
+   #@players.each do |player|
+     $game_debug += "game_over?: @current_player.team: #{@current_player.team}\n"
+     king = @board.get_pieces(type: "King", team: @current_player.team)[0]
+     $game_debug += "game_over?: king is #{king}\n"
+     $game_debug += "board is:\n #{@board.to_s}"
      return true if Movement.checkmate?(king, @board)
+  # end
+ end
+
+ def start
+   set_up_board
+   @players[0].team = "white"
+   @players[1].team = "black"
+   @current_player = @players[0]
+
+   game_over = false
+
+   until game_over
+     @io_stream.update
+     player_turn
+     change_current_player
+     game_over = game_over?
    end
  end
 
+ def change_current_player
+   @current_player = @players.find { |p| p != @current_player }
+ end
+
  def player_turn(player = @current_player)
+   move = nil
+
    loop do
-     move = @current_player.get_input
+       $game_debug += "player_turn loop: @msg_arr[0] is: #{@msg_arr[0]}\n"
+       input = player.get_input({})
+       move = Move.new(board, input)
      break if valid?(move)
    end
 
@@ -45,28 +87,49 @@ class Game
  end
 
  def valid?(move)
-   piece = move[:piece]
-   pos = move[:pos]
-   removed = move[:removed]
+   piece = move.piece
+   pos = move.pos
+   removed = move.removed
+
+   unless piece.team == @current_player.team
+     @msg_arr[0] = "You can only move pieces on your team (#{@current_player.team})."
+     return false
+   end
 
    #Must be a possible move of the piece
-   return false unless piece.possible_moves.include?(pos) || piece.special_moves(@board).include?(pos)
-  
+   unless Movement.possible_move?(piece, pos, board) #piece.possible_moves.include?(pos) || piece.special_moves(@board).include?(pos)
+     @msg_arr[0] = "#{piece.to_s} cannot move there."
+     return false
+   end
+
    #Must not move to a square occupied by a friendly piece
-   return false if removed && piece.team == removed.team
+   if removed && piece.team == removed.team
+     @msg_arr[0] = "Destination is occupied by a friendly piece."
+     return false
+   end
 
    #King must not be in check after move
-   king = @board.get_pieces(type: "King", team: piece.team)
+   king = @board.get_pieces(type: "King", team: piece.team)[0]
+   $game_debug += "valid?) @board.arr.object_id before move: #{@board.arr.object_id}\n"
    move.do(@board)
+   $game_debug += "valid?) @board.arr.object_id after move: #{@board.arr.object_id}\n"
    check_after_move = Movement.in_check?(king, @board)
    @board.rewind(1)
-   return false if check_after_move
+   $game_debug += "valid?) @board.arr.object_id after rewind: #{@board.arr.object_id}\n"
+   if check_after_move
+     @msg_arr[0] = "Move puts king in check."
+     return false
+   end
 
+   @msg_arr[0] = ""
    return true
  end
 
  def draw
 
+   #dead positions
+   #knight + king vs. king
+   #
  end
 
  def self.from_json(json_str)
@@ -100,22 +163,39 @@ end
 class Move
   attr_reader :piece, :prev_pos, :pos, :removed, :castle, :promotion
   
-  def initialize(args)
+  def initialize(board, args)
+    $game_debug += "Move.new called. args are: #{args}\n"
+    @board = board
     if args.kind_of?(String)
       @notation = args
-      args = get_from_notation(@notation)
+      args = get_from_notation(@notation, @board)
+    else
+      args = get_from_array(args, @board)
     end
 
     @piece = args.fetch(:piece)
-    @prev_pos = args.fetch(:prev_pos, @piece.current_pos)
+    @prev_pos = args.fetch(:prev_pos)
     @pos = args.fetch(:pos)
     @removed = args.fetch(:removed, nil)
     @castle = args.fetch(:castle, false)
     @promotion = args.fetch(:promotion, false)
+
+    $game_debug += "Move initialized with following variables:\n" +
+                   "@piece: #{@piece}\n@prev_pos: #{@prev_pos}\n@pos: #{@pos}\n" +
+                   "@removed: #{@removed}\n@castle: #{@castle}\n@promotion: #{@promotion}\n"
   end
 
-  def get_from_notation(note)
-    ChessNotation.from_notation(note)
+  def get_from_notation(note, board)
+    ChessNotation.from_notation(note, board)
+  end
+
+  def get_notation(prev_pos, pos, board)
+    ChessNotation.get_notation(prev_pos, pos, board)
+  end
+
+  def get_from_array(pos_arr, board)
+    $game_debug += "called Move.get_from_array(#{pos_arr}, board)\n"
+    ChessNotation.translate_move(pos_arr[0], pos_arr[1], board)
   end
 
   def set_removed(removed)
@@ -135,6 +215,13 @@ class Move
     { piece: @piece,
       pos: @prev_pos }
   end
+
+  def do(board)
+    board.move(@piece, @pos)
+    if @castle
+      board.move(@castle[:piece], @castle[:pos]) 
+    end
+  end
 end
 
 module ChessNotation
@@ -147,6 +234,35 @@ module ChessNotation
                  "Queen" => "Q",
                  "King" => "K",
                  "Rook" => "R" }
+
+   def self.translate_move(prev_pos, new_pos, board)
+     piece = board.get_piece_at(prev_pos)
+     new_pos_piece = board.get_piece_at(new_pos)
+
+     #check for castle
+     if piece.kind_of?(King) && (prev_pos[1] - new_pos[1]).abs > 1
+       queenside = new_pos[1] == 3
+       r = new_pos[0]
+       rook_prev_pos = queenside ? [r, 0] : [r, 7]
+       rook_pos = queenside ? [new_pos[0], (new_pos[1] + 1)] : [new_pos[0], (new_pos[1] - 1)]
+       rook = board.get_piece_at(rook_prev_pos)
+       castle = { piece: rook, prev_pos: rook_prev_pos, pos: rook_pos }
+     else
+       castle = false
+     end
+
+
+     promotion = nil
+
+     move_hash = { piece: piece,
+                   prev_pos: prev_pos,
+                   pos: new_pos,
+                   removed: new_pos_piece,
+                   castle: castle,
+                   promotion: promotion } 
+    
+     return move_hash 
+   end
 
    #public interface from game move to chess notation
    def self.to_notation(prev_pos, new_pos, board)

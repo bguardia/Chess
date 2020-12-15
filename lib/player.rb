@@ -17,6 +17,10 @@ class Player
                 :team => @team })
   end
 
+  def team=(team)
+    @team = team
+  end
+
   def get_input(args)
     @input_handler.get_input(args)
   end

@@ -1,18 +1,12 @@
 #require 'chess'
 
-class Gamestate
+module Gamestate
 
   REMOVED = nil
 
-  attr_reader :log
-
-  def initialize
-    @log = []
-  end
-
-  def add(board)
+  def update 
     prev_state = get_previous_state(1)
-    pieces = board.get_pieces
+    pieces = self.get_pieces
     pieces_hash = {} 
 
     #Check for pieces which have been removed from game since last state
@@ -50,23 +44,24 @@ class Gamestate
 end
 
 class Board
-
+  include Gamestate
   attr_reader :arr
 
   def initialize(args = {})
     @height = args.fetch(:height, 8)
     @width = args.fetch(:width, 8)
-    @arr = create_array
-    @gamestate = Gamestate.new
+    @arr = args.fetch(:arr, nil) || create_array
     
     if pieces = args.fetch(:pieces, nil)
       pieces.each { |p| p.add_to_board(self) }
       update_gamestate
     end
+
+    @log = []
   end
 
   def update_gamestate
-    @gamestate.add(self)
+    update
   end
 
   def create_array
@@ -166,7 +161,11 @@ class Board
 
   public
   def clear
-    @arr = create_array
+    @arr.each do |row|
+      row.each do |cell|
+        cell = nil
+      end
+    end  
   end
 
   def set_arr (arr)
@@ -181,7 +180,7 @@ class Board
   end
 
   def rewind(n)
-    prev_state = @gamestate.revert_to_previous_state(n)
+    prev_state = revert_to_previous_state(n)
     clear
     prev_state.each_value do |p_arr|
       unless p_arr.nil?
@@ -190,6 +189,20 @@ class Board
     end     
     
   end
+
+=begin
+  def simulate_move(piece, pos)
+    dup_arr = @arr.map do |row|
+      row.dup.map do |cell|
+        cell.dup
+      end
+    end
+
+    sim_board = Board.new(arr: dup_arr)
+
+    sim_board.move(piece, pos)
+  end
+=end
 
   public
   def to_s

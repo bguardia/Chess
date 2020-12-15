@@ -5,7 +5,7 @@ require './lib/game.rb'
 require './lib/board.rb'
 require './lib/piece.rb'
 
-$debug_log = ""
+$window_debug = ""
 
 module Keys
 
@@ -38,6 +38,9 @@ module InteractiveWindow
   def post_get_input; end
   def get_input
     @input_to_return = gets.chomp #Wrap gets or win.getch so other objects don't need to know the difference
+  end
+
+  def handle_unmapped_input(input)
   end
 
   #Method to handle returned input if the input is not a special character
@@ -135,6 +138,7 @@ class InteractiveScreen < Screen
   end
 
   def before_get_input
+    update
     active_region.before_get_input
   end
 
@@ -593,9 +597,12 @@ class Map
 
   public
   def update
+    $window_debug += "called #{self.class}.update.\n"
     update_logic
     return nil unless @win
     @win.refresh
+    $window_debug += "#{self.class} after update is:\n#{to_s}"
+    $window_debug += "@arr.object_id is: #{@arr.object_id}"
   end
 
   def to_s
@@ -650,11 +657,26 @@ class Menu
     @win = win
   end
 
+  def height
+    @height
+  end
+
+  def width
+    @width
+  end
+
+  def top
+    @top
+  end
+
+  def left
+    @left
+  end
+
   def to_up
     if @pos_y - 1 >= 0
       @pos_y -= 1
     end
-    $debug_log += "called to_up\n"
     update
   end
 
@@ -662,17 +684,14 @@ class Menu
     if @pos_y + 1 <= @options.length - 1
       @pos_y += 1
     end
-    $debug_log += "called to_down\n"
     update
   end 
 
   def active
-    $debug_log += "active is: #{@options[@pos_y]}"
     @options[@pos_y]
   end
 
   def update
-    $debug_log += "called update"
     i = 0
     @options.length.times do
       if i == @pos_y
@@ -692,8 +711,8 @@ class Menu
   end
 
   def select
-    $debug_log += "called select\n"
     @break = true
+    @win.erase
     active[1].call
   end
 
@@ -763,7 +782,6 @@ class TypingField
  end
 
  def set_color
-   $debug_log += "called set_color\n"
    col = Curses.color_pair(return_c_pair(@fg, @bg))
    @win.attron(col)
    @win.setpos(0,0)
@@ -928,6 +946,7 @@ class CursorMap < Map
     @stored_input = nil
     Curses.noecho
     Curses.cbreak
+    Curses.curs_set(1)
     @win.keypad(true)
   end
 
@@ -1116,10 +1135,39 @@ begin
   returned_input = inputgetter.get_input
 ensure
   Curses.close_screen
-  puts $debug_log
 end
 
   puts "returned input was: #{returned_input}"
+end
+
+
+#Actual useful function
+def get_board_map(board)
+ 
+  board_str = "   a  b  c  d  e  f  g  h   \n" +
+             "1| X  X  X  X  X  X  X  X | \n" +
+             "2| X  X  X  X  X  X  X  X | \n" +
+             "3| X  X  X  X  X  X  X  X | \n" +
+             "4| X  X  X  X  X  X  X  X | \n" +
+             "5| X  X  X  X  X  X  X  X | \n" +
+             "6| X  X  X  X  X  X  X  X | \n" +
+             "7| X  X  X  X  X  X  X  X | \n" +
+             "8| X  X  X  X  X  X  X  X | \n" + 
+             " -------------------------- \n"
+   
+  bg_map =     "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" +
+             (("bbMMMWWWMMMWWWMMMWWWMMMWWWbb\n" +
+               "bbWWWMMMWWWMMMWWWMMMWWWMMMbb\n") * 4) +
+               "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
+
+  fg_map =     "  WWWMMMWWWMMMWWWMMMWWWMMM  \n" +
+             (("WW                          \n" +
+               "MM                          \n") * 4 ) +
+               "                            "
+  arr = board.arr 
+ 
+  board_map = CursorMap.new(top: 12, left: 12, arr: arr, str: board_str, key: "X", bg_map: bg_map, fg_map: fg_map)
+
 end
 
 def test_cursor_map
