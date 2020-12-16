@@ -127,9 +127,15 @@ class Game
  end
 
  def valid?(move)
+   unless move.legible
+     @msg_arr << "Couldn't read move."
+     return false
+   end
+
    piece = move.piece
    pos = move.pos
    removed = move.removed
+   
 
    unless piece.team == @current_player.team
      @msg_arr << "You can only move pieces on your team (#{@current_player.team})."
@@ -200,11 +206,12 @@ class Game
 end
 
 class Move
-  attr_reader :piece, :prev_pos, :pos, :removed, :castle, :promotion, :notation
+  attr_reader :piece, :prev_pos, :pos, :removed, :castle, :promotion, :notation, :legible
   
   def initialize(board, args)
     $game_debug += "Move.new called. args are: #{args}\n"
     @board = board
+  
     if args.kind_of?(String)
       @notation = args
       args = get_from_notation(@notation, @board)
@@ -212,6 +219,21 @@ class Move
       args = get_from_array(args, @board)
     end
 
+    unless args.fetch(:piece) && args.fetch(:pos)
+      @legible = false      
+    else
+      @legible = true
+      initialize_vars(args)
+    end
+
+=begin
+    $game_debug += "Move initialized with following variables:\n" +
+                   "@piece: #{@piece}\n@prev_pos: #{@prev_pos}\n@pos: #{@pos}\n" +
+                   "@removed: #{@removed}\n@castle: #{@castle}\n@promotion: #{@promotion}\n"
+=end  
+  end
+
+  def initialize_vars(args)
     @piece = args.fetch(:piece)
     @prev_pos = args.fetch(:prev_pos)
     @pos = args.fetch(:pos)
@@ -219,11 +241,6 @@ class Move
     @castle = args.fetch(:castle, false)
     @promotion = args.fetch(:promotion, false)
     @notation ||= ChessNotation.to_notation(@prev_pos, @pos, @board)
-=begin
-    $game_debug += "Move initialized with following variables:\n" +
-                   "@piece: #{@piece}\n@prev_pos: #{@prev_pos}\n@pos: #{@pos}\n" +
-                   "@removed: #{@removed}\n@castle: #{@castle}\n@promotion: #{@promotion}\n"
-=end  
   end
 
   def get_from_notation(note, board)
