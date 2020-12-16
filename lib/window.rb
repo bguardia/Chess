@@ -20,326 +20,6 @@ module Keys
 
 end
 
-module InteractiveWindow
-  #A module that allows an input source to interactive with input handler
-  #The default methods are an example of using $stdin
-  def interactive
-    true
-  end
-
-  #Stores any special keys used by a paticular context
-  #(Will be over-ridden by arguments passed to input_handler)
-  def key_map
-    {}
-  end
-
-  #Called during InputHandler's get_input loop
-  def before_get_input; end
-  def post_get_input; end
-  def get_input
-    @input_to_return = gets.chomp #Wrap gets or win.getch so other objects don't need to know the difference
-  end
-
-  def handle_unmapped_input(input)
-  end
-
-  #Method to handle returned input if the input is not a special character
-  def return_input(input); end
-
-  def break_condition
-    true #Because gets.chomp returns input as soon as entered is pressed, loop should automatically break
-  end
-
-  #Add new context based on key press
-  def update_key_map; end
-
-  #A way for window/io to return its input
-  def return_input
-    @input_to_return
-  end
-end
-
-class Window
-
-  def initialize(args)   
-    @padding = args.fetch(:padding, 0)
-    @padding_left = args.fetch(:padding_left, nil) || @padding
-    @padding_right = args.fetch(:padding_right, nil) || @padding
-    @padding_top = args.fetch(:padding_top, nil) || @padding
-    @padding_bottom = args.fetch(:padding_bottom, nil) || @padding
-    
-    @content = args.fetch(:content, nil)
-    
-    @height = args.fetch(:height, nil) || determine_height_of(@content) + @padding_top + @padding_bottom
-    @width = args.fetch(:width, nil) || determine_width_of(@content) + @padding_left + @padding_right
-    @top = args.fetch(:top, 0)
-    @left = args.fetch(:left, 0)
-  
-    @border_top = args.fetch(:border_top, nil)
-    @border_side = args.fetch(:border_side, nil)
-
-    $window_debug += "Initializing #{self.class}:\n@height: #{@height}\n" +
-                     "@width: #{@width}\n@top: #{@top}\n@left: #{@left}\n" +
-                     "@padding: #{@padding}\n@padding_left: #{@padding_left}\n" +
-                     "@padding_right: #{@padding_right}\n@padding_top: #{@padding_top}\n" +
-                     "@padding_bottom: #{@padding_bottom}\n"
-
-    @border_win = nil #encapsulating window with border + padding
-    @win = create_win #window to handle output
-
-    $window_debug += "Initialized window.\n@border_win: #{@border_win}\n" +
-                     "@win: #{@win}\n"
-
-    post_initialize(args)
-  end
-
-  private
-  def post_initialize(args); end
-
-  private
-  def determine_height_of(content = @content)
-    return 1 if content.nil?
-
-    if content.kind_of?(Array)
-      if content.flatten == @content
-        return 1
-      else
-        return content.length
-      end
-    else
-      return content.split("\n").length
-    end
-  end
-
-  private
-  def determine_width_of(content = @content)
-    return 1 if content.nil?
-
-    if content.kind_of?(Array)
-      if content.flatten == @content
-        return content.length
-      else
-        return content.first.length
-      end
-    else
-      arr = content.split("\n")
-      max_width = arr.reduce(0) do |max, s|
-        if s.length > max
-          s.length
-        else
-          max
-        end
-      end
-
-      return max_width 
-    end
-  end
-
-  public
-  def height
-    @height
-  end
-
-  def width
-    @width
-  end
-
-  def top
-    @top
-  end
-
-  def left
-    @left
-  end
-
-  def border_top
-    @border_top
-  end
-
-  def border_side
-    @border_side
-  end
-
-  def set_win(win)
-    @win = win
-  end
-
-  def addstr(str)
-    if @content.nil?
-      @content = ""
-    end
-    @content += str
-    @win.setpos(0,0)
-    @win.addstr(@content)
-  end
-
-  def get_input
-    @win.getch  
-  end
-
-  def close
-    @win.close
-  end
-
-  def create_win
-    @border_win = Curses::Window.new(@height, @width, @top, @left)
-    
-    if border_top && border_side
-      @border_win.box(border_top, border_side)
-    end
-    @border_win.refresh
-
-    h = @height - @padding_top - @padding_bottom
-    w = @width - @padding_left - @padding_right
-    t = @top + @padding_top
-    l = @left + @padding_left
-    win = @border_win.subwin(h, w, t, l)
-    win.refresh
-    return win
-  end
-
-  def update
-      @win.refresh
-  end
-end
-
-#A screen holds information about and manages all windows. 
-class Screen < Window
-  
-  def post_initialize(args)
-    @regions = []
-    post_post_initialize(args)
-  end
-
-  def post_post_initialize(args); end
-
-  def add_region(rgn)
-=begin
-    h = rgn.height
-    w = rgn.width
-    t = rgn.top
-    l = rgn.left
-    
-    rgn.set_win(CursesWrapper.new_window(height: h,
-                                         width: w,
-                                         top: t,
-                                         left: l))
-=end
-    @regions << rgn
-  end
-
-  def update
-    @regions.each { |rgn| rgn.update }
-  end
-
-  def get_input
-    #@win.getch
-  end
-
-end
-
-class InteractiveScreen < Screen
-  include InteractiveWindow
-
-  def post_post_initialize(args)
-    @active_region = nil
-    @break = false
-  end
-
-  def interactive_rgns
-    @regions.filter { |r| r.respond_to?(:interactive) }
-  end
-
-  def change_active_rgn
-    interactive = interactive_rgns
-    l = interactive.length
-    i = interactive.index(@active_region)
-    
-    #If active region has not been previously set,
-    #set first interactive window as active. Otherwise choose next 
-    #window in array (wraps around).
-    if l == 0
-      @active_region = nil 
-    elsif i.nil?
-      @active_region = interactive.first
-      @active_region.before_get_input
-    else
-      next_i = (i + 1) % l
-      @active_region.post_get_input
-      @active_region = interactive[next_i]
-      @active_region.before_get_input
-    end
-
-    return @active_region
-  end
-
-  def update_input_environment
-
-  end
-
-  def active_region
-    @active_region ||= change_active_rgn
-  end
-
-  def before_get_input
-    #update
-    active_region.before_get_input
-  end
-
-  def post_get_input
-    active_region.post_get_input
-  end
-
-  def get_input
-    active_region.get_input
-  end
-
-  def break_condition
-    active_region.break_condition
-  end
-
-  def key_map
-    map = { Keys::TAB =>-> { change_active_rgn },
-            Keys::ESCAPE => -> { @break = true }}
-    if active_region  
-      map.merge(active_region.key_map)
-    end 
-  end
-
-  def update_key_map
-    key_map
-  end
-
-  def handle_unmapped_input(input) 
-    active_region.handle_unmapped_input(input)
-  end
-
-  def return_input
-    active_region.return_input
-  end
-end
-
-module CursesWrapper
-
-  def self.new_window(args)
-    h = args.fetch(:height)
-    w = args.fetch(:width)
-    t = args.fetch(:top)
-    l = args.fetch(:left)
-    bt = args.fetch(:border_top, nil)
-    bs = args.fetch(:border_side, nil)
-
-    win = Curses::Window.new(h, w, t, l)
-
-    if bt && bs
-      win.box(bt, bs)
-    end
-    
-    return win
-  end
-
-end
-
 module Highlighting
    
 =begin
@@ -473,17 +153,16 @@ module Highlighting
     end
   end
 
-  def curses_fill(win, height, width, c_arr, chr = " ")
-    color_pair = c_color_pairs.fetch(c_arr, nil) || new_c_pair(c_arr)
-    
-    win.setpos(0,0)
-    win.attron(Curses.color_pair(color_pair))
-    height.times do
-      width.times do
-        win.addch(chr)
-      end
-    end
-    win.attroff(Curses.color_pair(color_pair))
+  def curses_fill(win, fg, bg, chr = " ")
+    color_pair = c_color_pairs.fetch([fg, bg], nil) || new_c_pair([fg, bg])
+    col = Curses.color_pair(color_pair)
+    $window_debug += "called curses_fill on #{self.class}\n"
+    $window_debug += "fg: #{fg}, bg: #{bg}, color_pair: #{color_pair}\n"
+    $window_debug += "col: #{col}\n"
+    win.attron(col)
+    win.bkgd(chr.ord)
+    win.attroff(col)
+    win.refresh
   end
 
   #create a copy of an array to hold highlight data
@@ -587,6 +266,372 @@ module Highlighting
     end 
 
     return colorized_str
+  end
+
+end
+
+module InteractiveWindow
+  #A module that allows an input source to interactive with input handler
+  #The default methods are an example of using $stdin
+  def interactive
+    true
+  end
+
+  #Stores any special keys used by a paticular context
+  #(Will be over-ridden by arguments passed to input_handler)
+  def key_map
+    {}
+  end
+
+  #Called during InputHandler's get_input loop
+  def before_get_input; end
+  def post_get_input; end
+  def get_input
+    @input_to_return = gets.chomp #Wrap gets or win.getch so other objects don't need to know the difference
+  end
+
+  def handle_unmapped_input(input)
+  end
+
+  #Method to handle returned input if the input is not a special character
+  def return_input(input); end
+
+  def break_condition
+    true #Because gets.chomp returns input as soon as entered is pressed, loop should automatically break
+  end
+
+  #Add new context based on key press
+  def update_key_map; end
+
+  #A way for window/io to return its input
+  def return_input
+    @input_to_return
+  end
+end
+
+class Window
+  include Highlighting
+  attr_reader :win
+  
+  def initialize(args)   
+    @padding = args.fetch(:padding, 0)
+    @padding_left = args.fetch(:padding_left, nil) || @padding
+    @padding_right = args.fetch(:padding_right, nil) || @padding
+    @padding_top = args.fetch(:padding_top, nil) || @padding
+    @padding_bottom = args.fetch(:padding_bottom, nil) || @padding
+    
+    @content = args.fetch(:content, nil)
+    
+    @height = args.fetch(:height, nil) || determine_height_of(@content) + @padding_top + @padding_bottom
+    @width = args.fetch(:width, nil) || determine_width_of(@content) + @padding_left + @padding_right
+    if args.fetch(:centered, false)
+      @top = (Curses.lines - @height) / 2
+      @left = (Curses.cols - @width) / 2
+    else
+      @top = args.fetch(:top, 0)
+      @left = args.fetch(:left, 0)
+    end
+
+    @fg = args.fetch(:fg, nil) || :white
+    @bg = args.fetch(:bg, nil) || :black
+    @bkgd = args.fetch(:bkgd, nil) || " "
+
+    @border_top = args.fetch(:border_top, nil)
+    @border_side = args.fetch(:border_side, nil)
+
+    $window_debug += "Initializing #{self.class}:\n@height: #{@height}\n" +
+                     "@width: #{@width}\n@top: #{@top}\n@left: #{@left}\n" +
+                     "@padding: #{@padding}\n@padding_left: #{@padding_left}\n" +
+                     "@padding_right: #{@padding_right}\n@padding_top: #{@padding_top}\n" +
+                     "@padding_bottom: #{@padding_bottom}\n"
+
+    @border_win = nil #encapsulating window with border + padding
+    @win = create_win #window to handle output
+
+    $window_debug += "Initialized window.\n@border_win: #{@border_win}\n" +
+                     "@win: #{@win}\n"
+
+    post_initialize(args)
+  end
+
+  private
+  def post_initialize(args); end
+
+  private
+  def determine_height_of(content = @content)
+    return 1 if content.nil?
+
+    if content.kind_of?(Array)
+      if content.flatten == @content
+        return 1
+      else
+        return content.length
+      end
+    else
+      return content.split("\n").length
+    end
+  end
+
+  def fill_win(win, fg, bg, chr = " ")
+    curses_fill(win, fg, bg, chr)
+  end
+
+  private
+  def determine_width_of(content = @content)
+    return 1 if content.nil?
+
+    if content.kind_of?(Array)
+      if content.flatten == @content
+        return content.length
+      else
+        return content.first.length
+      end
+    else
+      arr = content.split("\n")
+      max_width = arr.reduce(0) do |max, s|
+        if s.length > max
+          s.length
+        else
+          max
+        end
+      end
+
+      return max_width 
+    end
+  end
+
+  public
+  def height
+    @height
+  end
+
+  def width
+    @width
+  end
+
+  def top
+    @top
+  end
+
+  def left
+    @left
+  end
+
+  def border_top
+    @border_top
+  end
+
+  def border_side
+    @border_side
+  end
+
+  def set_win(win)
+    @win = win
+  end
+
+  def set_bg(fg, bg, chr = " ")
+    @fg = fg
+    @bg = bg
+    @bkgd = chr 
+  end
+
+  def addstr(str)
+    if @content.nil?
+      @content = ""
+    end
+    @content += str
+    @win.setpos(0,0)
+    @win.addstr(@content)
+  end
+
+  def get_input
+    @win.getch  
+  end
+
+  def close
+    @win.close
+  end
+
+  def create_win
+    @border_win = Curses::Window.new(@height, @width, @top, @left)
+    
+    if border_top && border_side
+      @border_win.box(border_side, border_top)
+    end
+    @border_win.refresh
+
+    h = @height - @padding_top - @padding_bottom
+    w = @width - @padding_left - @padding_right
+    t = @top + @padding_top
+    l = @left + @padding_left
+    win = @border_win.subwin(h, w, t, l)
+    win.refresh
+    return win
+  end
+
+  #Update methods for redrawing and refreshing windows
+  #update calls border_win_update and win_update
+  #to change how the window is updated, overwrite the win_update method
+  def border_win_update
+    #fill_win(@border_win, @fg, @bg, @bkgd)
+    col = Curses.color_pair(return_c_pair(@fg, @bg))
+    y = 0
+    @height.times do
+      @border_win.setpos(y, 0)
+      @border_win.attron(col) do
+        @border_win.addstr( @bkgd * @width )
+      end
+      y += 1
+    end
+    @border_win.refresh
+  end
+
+  def win_update
+    if @content.kind_of?(String)
+      to_print = @content.split("\n")
+    else
+      to_print = @content
+    end
+
+    y = 0
+    to_print.each do |line|
+      @win.setpos(y,0)
+      @win.addstr(line)
+      y += 1
+    end
+    
+    @win.refresh
+  end
+
+  def update
+    border_win_update 
+    win_update
+  end
+end
+
+#A screen holds information about and manages all windows. 
+class Screen < Window
+  
+  def post_initialize(args)
+    @regions = []
+    post_post_initialize(args)
+  end
+
+  def post_post_initialize(args); end
+
+  def add_region(rgn)
+    @regions << rgn
+  end
+
+  def win_update
+    @win.refresh
+    @regions.each { |rgn| rgn.update }
+  end
+
+  def get_input
+    #@win.getch
+  end
+
+end
+
+class InteractiveScreen < Screen
+  include InteractiveWindow
+
+  def post_post_initialize(args)
+    @active_region = nil
+    @break = false
+  end
+
+  def interactive_rgns
+    @regions.filter { |r| r.respond_to?(:interactive) }
+  end
+
+  def change_active_rgn
+    interactive = interactive_rgns
+    l = interactive.length
+    i = interactive.index(@active_region)
+    
+    #If active region has not been previously set,
+    #set first interactive window as active. Otherwise choose next 
+    #window in array (wraps around).
+    if l == 0
+      @active_region = nil 
+    elsif i.nil?
+      @active_region = interactive.first
+      @active_region.before_get_input
+    else
+      next_i = (i + 1) % l
+      @active_region.post_get_input
+      @active_region = interactive[next_i]
+      @active_region.before_get_input
+    end
+
+    return @active_region
+  end
+
+  def update_input_environment
+
+  end
+
+  def active_region
+    @active_region ||= change_active_rgn
+  end
+
+  def before_get_input
+    #update
+    active_region.before_get_input
+  end
+
+  def post_get_input
+    active_region.post_get_input
+  end
+
+  def get_input
+    active_region.get_input
+  end
+
+  def break_condition
+    active_region.break_condition
+  end
+
+  def key_map
+    map = { Keys::TAB =>-> { change_active_rgn },
+            Keys::ESCAPE => -> { @break = true }}
+    if active_region  
+      map.merge(active_region.key_map)
+    end 
+  end
+
+  def update_key_map
+    key_map
+  end
+
+  def handle_unmapped_input(input) 
+    active_region.handle_unmapped_input(input)
+  end
+
+  def return_input
+    active_region.return_input
+  end
+end
+
+module CursesWrapper
+
+  def self.new_window(args)
+    h = args.fetch(:height)
+    w = args.fetch(:width)
+    t = args.fetch(:top)
+    l = args.fetch(:left)
+    bt = args.fetch(:border_top, nil)
+    bs = args.fetch(:border_side, nil)
+
+    win = Curses::Window.new(h, w, t, l)
+
+    if bt && bs
+      win.box(bt, bs)
+    end
+    
+    return win
   end
 
 end
@@ -709,11 +754,10 @@ class Map < Window
   end
 
   public
-  def update
+  def win_update
     $window_debug += "called #{self.class}.update.\n"
     update_logic
     return nil unless @win
-    #@border_win.refresh
     @win.refresh
     $window_debug += "#{self.class} after update is:\n#{to_s}"
     $window_debug += "@arr.object_id is: #{@arr.object_id}"
@@ -733,28 +777,36 @@ class List < Window
   include Highlighting
 
   def post_initialize(args)
+    @num_lines = args.fetch(:lines, nil) || @height
     @col_arr = args.fetch(:color_arr, nil) || [[:white, :black]]
+    post_post_initialize(args)
   end
 
   def post_post_initialize(args); end
 
-  def update
-    to_print = @content.length > @height ? @content[-@height...@content.length] : @content
+  def win_update
+    #gets the last @num_lines lines of @content (or all if length < @num_lines)
+    to_print = @content.length > @num_lines ? @content[-@num_lines...@content.length] : @content
     y = 0
+    @win.erase
     to_print.each do |line|
       @win.setpos(y,0)
       c_pair = get_line_color(y)
       c_num = return_c_pair(c_pair[0], c_pair[1]) 
       col = Curses.color_pair(c_num)
       @win.attron(col)
-      @win.addstr(line.ljust(@width))
+      @win.addstr(line.ljust(@width - @padding * 2))
       @win.attroff(col)
-      y += 1
+      y += @height/@num_lines
+      break if y > @height
     end
+    @win.refresh
+    $window_debug += "called #{self.class}.update. to_print is: #{to_print}\n"
   end
 
   def get_line_color(line_num)
-    i = line_num % (@col_arr.length - 1)
+    return 0 if @col_arr.empty?
+    i = line_num % @col_arr.length
     @col_arr[i]
   end
 end
@@ -763,7 +815,7 @@ class Menu < List
   include InteractiveWindow
   include Highlighting
 
-  def post_initialize(args)
+  def post_post_initialize(args)
     @actions = args.fetch(:actions) #a 2D array containing a string to display and a lambda to call = ["Start Game", ->{ game_start}]
     @pos_y = 0
     @selected_col = args.fetch(:col2, nil)
@@ -907,10 +959,6 @@ class TypingField < Window
    @win.refresh
  end
 
- def update
-  @win.refresh
- end
-
 end
 
 class CursorMap < Map
@@ -999,6 +1047,7 @@ class CursorMap < Map
   end
 
   def get_input
+    update_cursor_pos
     @win.getch
   end
 

@@ -5,36 +5,28 @@ require './lib/piece.rb'
 require './lib/window.rb'
 require './lib/chess_notation.rb'
 
-
+$chess_debug = ""
 
 def pop_up(str)
-  padding = 2
-  h = str.split("\n").length + padding * 2
-  w = str.index("\n") + padding * 2
-  t = Curses.lines / 2
-  l = Curses.cols / 2
+  padding = 10
 
-  win = Window.new(height: h,
-                   width:  w,
-                   top: t,
-                   left: l,
+  win = Window.new(content: str,
+                   padding: padding,
+                   centered: true,
                    border_top: "-",
                    border_side: "|")
-
-  win.addstr(str)
+  win.update
   input = win.get_input
   win.close
-  Curses.refresh
   return input
 end
 
 def start_game
-  height = 40 + 2 < Curses.lines ? 40 : 30 
-  width = 80 + 2 < Curses.cols ? 80 : 60
-  padding = 2
-  top = (Curses.lines - height) / 2
-  left = (Curses.cols - width) / 2
-  game_screen = InteractiveScreen.new(height: height, width: width, top: top, left: left, padding: padding)
+  height = Curses.lines 
+  width = Curses.cols
+  top = 0 
+  left = 0 
+  game_screen = InteractiveScreen.new(height: height, width: width, top: top, left: left)
   game_input_handler = InputHandler.new(in: game_screen)
   board = Board.new
   board_map = get_board_map(board)
@@ -87,10 +79,11 @@ def settings
 end
 
 def start_menu
-  h = 15
-  w = 40
-  t = Curses.lines / 2
-  l = Curses.cols / 2
+  p = 2
+  h = 15 + p * 2
+  w = 40 + p * 2
+  t = (Curses.lines - h) / 2
+  l = (Curses.cols - w) / 2
   content = ["Start game",
              "Load save",
              "Quit game",
@@ -102,12 +95,14 @@ def start_menu
              -> {about_game}]
   Menu.new(height: h,
            width: w,
-           top: t,
-           left: l,
+           padding: p,
+           centered: true, 
            content: content,
            actions: actions,
            col1: [:white, :black],
-           col2: [:white, :cyan])
+           col2: [:white, :cyan],
+           border_top: "-",
+           border_side: "|")
 end
 
 if __FILE__ == $0
@@ -115,18 +110,26 @@ begin
   Curses.init_screen
   Curses.start_color
 
-  screen = InteractiveScreen.new(height: 40, width: 80, top: 0, left: 0)
+  h = Curses.lines
+  w = Curses.cols
+  screen = InteractiveScreen.new(height: h, width: w, top: 0, left: 0, fg: :white, bg: :red, bkgd: " ")
+  
+  #screen.set_bg(:white, :red, "A")
   screen.add_region(start_menu)
- 
+  screen.update
   input_handler = InputHandler.new(in: screen)
 
   loop do
     input_handler.get_input
+    screen.update
   end
 ensure
   Curses.close_screen
   puts $game_debug
-  puts $window_debug
+  #puts $window_debug
+  #puts $board_debug
+  #puts $pieces_debug
+  #puts $chess_debug
 end
 
 end
