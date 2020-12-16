@@ -143,7 +143,7 @@ class Game
    end
 
    #Must be a possible move of the piece
-   unless Movement.possible_move?(piece, pos, board) #piece.possible_moves.include?(pos) || piece.special_moves(@board).include?(pos)
+   unless piece.possible_moves(board).include?(pos)
      @msg_arr << "#{piece.to_s} cannot move there."
      return false
    end

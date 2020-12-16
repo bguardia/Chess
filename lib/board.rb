@@ -105,6 +105,7 @@ class Board
     $board_debug += "current_pos is not nil\n"
     remove_at(current_pos)
     place(piece, pos)
+    piece.set_moved(true)
     update_gamestate
   end
 

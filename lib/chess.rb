@@ -1,6 +1,7 @@
 require './lib/game.rb'
 require './lib/player.rb'
 require './lib/board.rb'
+require './lib/movement.rb'
 require './lib/piece.rb'
 require './lib/window.rb'
 require './lib/chess_notation.rb'
