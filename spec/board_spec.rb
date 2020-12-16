@@ -85,5 +85,79 @@ describe Board do
       empty_arr = Array.new(8) { Array.new(8, nil) }
       expect(board.arr).to match_array empty_arr
     end
+
+    it "doesn't change object_id of array" do
+      board = Board.new
+      piece = double("Piece")
+      fill(board, piece)
+      original_arr = board.arr
+      board.clear
+      expect(original_arr.object_id).to eq(board.arr.object_id)
+    end
+  end
+
+  describe "#rewind(n)" do
+    it "sets the board to the state n turns ago" do
+      board = Board.new
+      pieces = []
+      
+      x = 0
+      8.times do
+        pieces << Pawn.new
+        board.place(pieces.last, [1, x])
+        x += 1
+      end
+      board.update_gamestate
+      prev_arr = board.arr.map { |r| r.dup }
+      board.move(pieces.first, [3, 0])
+      board.rewind(1)
+      expect(board.arr).to match_array prev_arr  
+    end
+  end
+  
+  describe "#return_last_moved" do
+    it "returns the piece that moved last" do
+      board = Board.new
+      pieces = []
+      x = 0
+      8.times do
+        pieces << Pawn.new(team: "black", starting_pos: [1, x])
+        board.place(pieces.last, [1, x])
+        x += 1
+      end
+      board.update_gamestate
+      first = pieces[0]
+      second = pieces[1]
+      third = pieces[2]
+      board.move(first, [3,0])
+      board.move(second, [3,1])
+      board.move(third, [3,2])
+      last = board.return_last_moved
+      expect(last).to eq(third)
+    end
+
+    it "does not return pieces that have been removed" do
+      board = Board.new
+      pieces = []
+      x = 0
+      8.times do
+       team = x > 3 ? "black" : "white"
+       y = x > 3 ? 4 : 6
+       pieces << Pawn.new(team: team, starting_pos: [y, x])
+       board.place(pieces.last, [y, x])
+       x += 1
+      end
+
+      board.update_gamestate
+      first = pieces[0]
+      second = pieces [3]
+      third = pieces[4]
+      board.move(first, [5, 0])
+      board.move(second, [5, 3])
+      board.move(third, [5, 3])
+      last = board.return_last_moved
+      expect(last).to eq(third)
+    end
   end
 end
+

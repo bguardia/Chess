@@ -1,23 +1,25 @@
 #require 'chess'
 
+$board_debug = ""
+
 module Gamestate
 
   REMOVED = nil
 
   def update 
-    prev_state = get_previous_state(1)
+    prev_state = get_previous_state(0)
     pieces = self.get_pieces
     pieces_hash = {} 
 
     #Check for pieces which have been removed from game since last state
     prev_state.each_key do |key|
-      pieces_hash[key] = REMOVED unless pieces.find { |p| p.object_id == key.to_i }
+      pieces_hash[key] = REMOVED unless pieces.find { |p| p.id == key.to_i }
     end
 
     #Check for pieces which have changed position since last state
     pieces.each do |p|
-      p_arr = [p, p.current_pos]
-      p_key = p.object_id.to_s
+      p_arr = [p, get_coords(p)]
+      p_key = p.id.to_s
       if prev_state[p_key] == p_arr
         next
       else
@@ -41,6 +43,22 @@ module Gamestate
     state = get_previous_state(0)
   end
 
+  def return_last_moved
+    $board_debug += "called return_last_moved.\n"
+    $board_debug += "@log.length = #{@log.length}\n"
+    log_str = ""
+    @log.last.each_pair do |key, val|
+      name = val.nil? ? "empty" : val[0].class
+      pos = val.nil? ? "none" : val[1]
+      log_str += "#{key} => #{name}, #{pos}\n"
+    end
+    $board_debug += "@log.last: #{log_str}\n"
+    @log.last.each_value do |val|
+      if val
+        return val[0]
+      end
+    end
+  end
 end
 
 class Board
@@ -52,12 +70,14 @@ class Board
     @width = args.fetch(:width, 8)
     @arr = args.fetch(:arr, nil) || create_array
     
+    
+    @log = []
+
     if pieces = args.fetch(:pieces, nil)
       pieces.each { |p| p.add_to_board(self) }
       update_gamestate
     end
 
-    @log = []
   end
 
   def update_gamestate
@@ -77,8 +97,12 @@ class Board
   end
 
   def move(piece, pos)
+    $board_debug += "called board.move(#{piece.class}, #{pos})\n"
+
     current_pos = get_coords(piece)
+    $board_debug += "current_pos: #{current_pos}\n"
     return nil if current_pos.nil?
+    $board_debug += "current_pos is not nil\n"
     remove_at(current_pos)
     place(piece, pos)
     update_gamestate
@@ -161,21 +185,29 @@ class Board
 
   public
   def clear
-    @arr.each do |row|
-      row.each do |cell|
-        cell = nil
-      end
-    end  
+    @arr.map! do |row|
+      row = Array.new(@width, nil)  
+    end
   end
 
   def set_arr (arr)
     @arr = arr
   end
+ 
+  def set_log(log)
+    @log = log
+  end
 
   def copy
     board_copy = self.dup
-    board_copy.set_arr( self.arr.map { |row| row.dup } )
+    arr = @arr.map do |row|
+      row.dup.map do |cell|
+              cell.dup
+      end
+    end
 
+    board_copy.set_arr(arr)
+    board_copy.set_log(@log.map { |h| h.dup })
     return board_copy
   end
 
@@ -190,19 +222,29 @@ class Board
     
   end
 
-=begin
+  def get_previous_pos(piece)
+    $board_debug += "called get_previous_pos\n"
+    return nil if piece.nil?
+    prev_state = get_previous_state(1)
+    val = prev_state.fetch(piece.id.to_s, nil)
+    $board_debug += "val fetched from prev_state: #{val}\n"
+    if val
+      return val[1]
+    else
+      return nil
+    end 
+  end
+
   def simulate_move(piece, pos)
     dup_arr = @arr.map do |row|
       row.dup.map do |cell|
         cell.dup
       end
     end
-
     sim_board = Board.new(arr: dup_arr)
-
     sim_board.move(piece, pos)
+    return sim_board
   end
-=end
 
   public
   def to_s

@@ -7,17 +7,18 @@ module Movement
 
   #create a new MovementArray originating at the current_pos
   #MovementArray's methods can be chained from here to create an array of possible moves
-  def from(piece)
-    MovementArray.new(piece)
+  def moves(piece, board)
+    MovementArray.new(piece, board)
   end
 
   class MovementArray
    
     attr_reader :moves, :modifiable_moves, :origin 
     
-    def initialize(piece)    
+    def initialize(piece, board)    
       @piece = piece
-      @origin = piece.current_pos
+      @board = board
+      @origin = board.get_coords(piece)
       @moves = []
       @modifiable_moves = [[0,0]]
     end
@@ -185,21 +186,25 @@ module Movement
     #and returns an array of positions. @moves and @modifiable_moves are also reset.
     #
     #This method should always be called at the end of a method chain.
+=begin
     def spaces(filters = {})
       on_board = filters.fetch(:on_board, true)
       not_blocked = filters.fetch(:no_blocked, true)
 
       add_moves
+      return [] if @moves.empty?
+      $board_debug += "MovementArray.spaces) @piece: #{@piece}, @board: #{@board}\n"
+      $board_debug += "MovementArray.spaces) moves: #{moves}, @origin: #{@origin}\n"
       moves = @moves.map { |move| [ move[0] + @origin[0], move[1] + @origin[1] ] }
       
       
       if on_board
-        board = @piece.board
+        board = @board
         moves.filter! { |move| board.cell_exists?(move) }
       end
 
       if not_blocked
-        board ||= @piece.board
+        board ||= @board
         moves.filter! { |move| !Movement.blocked?(@piece, move, board) }
       end
 
@@ -207,18 +212,31 @@ module Movement
       reset_modifiable_moves
       return moves
     end
-
-    def spaces_on(board)
-      moves = spaces
+=end
+    def spaces(args = {})
+      add_moves
+      moves = @moves.map { |move| [move[0] + @origin[0], move[1] + @origin[1]] }
       
-      on_board = moves.filter { |move| board.cell_exists?(move) }
+      on_board = moves.filter { |move| @board.cell_exists?(move) }
 
       unless @piece.kind_of?(Knight)
         on_board.filter! do |move|
-          !Movement.blocked?(@piece, move, board)
+          !Movement.blocked?(@piece, move, @board)
         end
       end
 
+      #pawns cannot capture pieces unless moving diagonally,
+      #so set :pawn_cap to true for diagonal movement
+      if @piece.kind_of?(Pawn)
+        unless args.fetch(:pawn_cap, false)
+          on_board.filter! do |move|
+            @board.get_piece_at(move).nil?
+          end
+        end
+      end
+
+      reset_moves
+      reset_modifiable_moves
       return on_board
     end
 
@@ -226,7 +244,7 @@ module Movement
 
   def self.get_possible_moves(piece, board, include_special_moves = true)
     #Get all possible moves from current location
-    possible_moves = piece.possible_moves
+    possible_moves = piece.possible_moves(board)
 
     #Remove moves that are off-board or blocked
     possible_moves.filter! do |move|
@@ -243,20 +261,22 @@ module Movement
   end
 
   def self.blocked?(piece, move, board, args = {})
-    return false if piece.kind_of?(Knight) #Knights can jump over pieces
+    #return false if piece.kind_of?(Knight) #Knights can jump over pieces
+    unless piece.kind_of?(Knight)
+      #get the number of spaces between current_pos and move
+      pos = board.get_coords(piece)
+      spaces_between = get_spaces_between(pos, move)
 
-    #get the number of spaces between current_pos and move
-    spaces_between = get_spaces_between(piece.current_pos, move)
+      #If piece is a pawn, add destination to spaces_between array
+      #Pawns can't take enemy pieces through normal movement
+      
+      
+      #return true if there are any pieces between the piece and the destination
+      pieces = spaces_between.map { |s| board.get_piece_at(s) }.compact
+      
+      return true unless pieces.empty?
+    end
 
-    #If piece is a pawn, add destination to spaces_between array
-    #Pawns can't take enemy pieces through normal movement
-
-    
-    #return true if there are any pieces between the piece and the destination
-    pieces = spaces_between.map { |s| board.get_piece_at(s) }.compact
-    
-    return true unless pieces.empty?
-    
     #Check destination space unless explicitly :ignore_dest is true
     unless args.fetch(:ignore_dest, false)
       dest_piece = board.get_piece_at(move)  
@@ -316,39 +336,53 @@ module Movement
 
     enemy_pieces = board.get_pieces(team: op_team)
 
-    king_pos = king.current_pos
-
+    king_pos = board.get_coords(king)
     $pieces_debug+=  "king's position is: #{king_pos}"
 
     enemy_pieces.any? do |piece|
       $pieces_debug+=  "piece: #{piece}"
-      $pieces_debug+=  "possible_moves: #{piece.possible_moves}"
-      piece.possible_moves.include?(king_pos)
+      $pieces_debug+=  "possible_moves: #{piece.possible_moves(board)}"
+      piece.possible_moves(board).include?(king_pos)
     end
   end
 
   def self.checkmate?(king, board)
+    $game_debug += "Movement.checkmate? called\n"
     return false unless in_check?(king, board)
+    $game_debug += "king is currently in check\n"
 
     pieces = board.get_pieces(team: king.team)
+    
+    $game_debug += "king's team is: #{king.team}\n"
+    $game_debug += "pieces are:\n#{pieces}\n"
 
-    $pieces_debug+=  "pieces on king's team:"
-    pieces.each { |p| $pieces_debug+=  p }
-
-    pieces.all? do |piece|
-      $pieces_debug+=  "current piece: #{piece.class}"
-      piece.possible_moves.all? do |move|
-        $pieces_debug+=  ">current_move: #{move}"
+    checkmate = pieces.all? do |piece|
+      $game_debug += "For #{piece.class} (id: #{piece.id})\n"
+      piece.possible_moves(board).all? do |move|
         #simulate move, check for check
         #if not check, it is not checkmate
-        board.move(piece, move)
-        in_check = in_check?(king, board)
-        $pieces_debug+=  "in_check?: #{in_check}"
-        board.rewind(1)
-        $pieces_debug+=  board
+        $game_debug += "move: #{move}, in_check?:"
+        sim_board = board.simulate_move(piece, move)
+        in_check = Movement.in_check?(king, sim_board)
+        $game_debug += "#{in_check}\n"
         in_check
       end
     end
+=begin
+    pos_arr = pieces.map { |p| sim_board.get_coords(p) }
+    checkmate = pos_arr.all? do |piece_pos|
+      piece = sim_board.get_piece_at(piece_pos)
+      piece.possible_moves(sim_board).all? do |move|
+        sim_piece = sim_board.get_piece_at(piece_pos)
+        sim_board.move(sim_piece, move)
+        in_check = Movement.in_check?(sim_king, sim_board)
+        sim_board.rewind(1)
+        in_check
+      end
+    end
+=end
+    $game_debug += "checkmate is: #{checkmate}\n"
+    return checkmate
   end
 end
 
@@ -428,9 +462,10 @@ class Piece
 
   include Movement
 
+  @@next_piece_id = 0
   @@moved_last_turn = nil #stores the piece that moved last
 
-  attr_reader :team, :board
+  attr_reader :team, :board, :id
 
   def initialize(args = {})
     @team = args.fetch(:team, "")
@@ -438,6 +473,8 @@ class Piece
     @icon = args.fetch(:icon, false) || get_icon
     @moved = args.fetch(:moved, false)
     @board = args.fetch(:board, nil)
+    @id = @@next_piece_id
+    @@next_piece_id += 1
   end
 
   def set_pos(pos)
@@ -490,7 +527,10 @@ class Piece
 
   public
   def moved_last_turn?
-    self == @@moved_last_turn
+    last_moved = board.return_last_moved
+    $pieces_debug += "last_moved: #{last_moved} (id: #{last_moved.id}\n"
+    $pieces_debug += "self.id: #{self.id}\n"
+    self == board.return_last_moved 
   end
 
   #Subclasses must define their own behavior for possible_moves and special_moves
@@ -517,6 +557,13 @@ class Piece
     @icon
   end
 
+  def ==(other)
+    if other.kind_of?(Piece)
+      self.id == other.id
+    else
+      false
+    end
+  end
   #Pieces require a possible_moves class
   #An array of possible moves can be created using the Movement module (see above)
 end
@@ -532,7 +579,7 @@ class Queen < Piece
   end
 
   def possible_moves(board = @board)
-    from(self).vertically(1..7).or.
+    moves(self, board).vertically(1..7).or.
       horizontally(1..7).or.
       diagonally(1..7).spaces
   end
@@ -550,7 +597,7 @@ class Rook < Piece
   end
 
   def possible_moves(board = @board)
-    from(self).horizontally(1..7).or.
+    moves(self, board).horizontally(1..7).or.
       vertically(1..7).spaces
   end
 
@@ -567,7 +614,7 @@ class Knight < Piece
   end
 
   def possible_moves(board = @board)
-    from(self).horizontally(2).and.vertically(1).or.
+    moves(self, board).horizontally(2).and.vertically(1).or.
       vertically(2).and.horizontally(1).spaces
   end
 
@@ -584,10 +631,12 @@ class King < Piece
   end
 
   def possible_moves(board = @board)
+    possible_arr = []
     #regular movement
-    from(self).horizontally(1).or.vertically(1).or.diagonally(1).spaces
-    #in check..
-    #castling..
+    possible_arr.concat(moves(self, board).horizontally(1).or.vertically(1).or.diagonally(1).spaces)
+    #castling
+    possible_arr.concat(special_moves(board))
+    return possible_arr
   end
 
   def special_moves(board = @board)
@@ -650,7 +699,7 @@ class Bishop < Piece
   end
 
   def possible_moves(board = @board)
-    from(self).diagonally(1..7).spaces
+    moves(self, board).diagonally(1..7).spaces
   end
 
 end
@@ -666,20 +715,23 @@ class Pawn < Piece
   end
 
   def possible_moves(board = @board)
+    possible_arr = []
     #if first move
     unless @moved
-      from(self).forward(1..2).spaces
+      possible_arr.concat(moves(self, board).forward(1..2).spaces)
     else
       #if not first move
-      from(self).forward(1).spaces
+      possible_arr.concat(moves(self, board).forward(1).spaces)
     end
+
+    possible_arr.concat(special_moves(board))
   end
 
   def special_moves(board = @board)
     special_moves_arr = []
 
     #Diagonal pawn captures
-    df_moves = from(self).forward(1).and.horizontally(1).spaces(no_blocked: false)
+    df_moves = moves(self, board).forward(1).and.horizontally(1).spaces(pawn_cap: true)
     df_moves.each do |move|
       something = board.get_piece_at(move)
       if something && something.team != team
@@ -691,13 +743,23 @@ class Pawn < Piece
     #En passant
     #If an enemy piece moves to a square horizontally adjacent to a pawn
     #the pawn can capture it on the next turn
-    if (self.current_pos[0] - self.starting_pos[0]).abs == 3 
-      adj_moves = from(self).horizontally(1).spaces(no_blocked: false)
+    current_pos = board.get_coords(self)
+    if (current_pos[0] - self.starting_pos[0]).abs == 3
+      $pieces_debug += "#{self.class} is 3 spaces from starting pos\n" 
+      adj_moves = moves(self, board).horizontally(1).spaces(pawn_cap: true)
+      $pieces_debug += "adj_moves is #{adj_moves}\n"
       adj_moves.each_index do |index|
         something = board.get_piece_at(adj_moves[index])
+        $pieces_debug += "something: #{something}\n"
         if something && something.kind_of?(Pawn)
-          if something.moved_last_turn? && something.previous_pos == something.starting_pos
+          $pieces_debug += "something is a Pawn\n"
+          prev_pos = board.get_previous_pos(something)
+          $pieces_debug += "Pawn's previous pos is: #{prev_pos}, starting_pos is: #{something.starting_pos}\n"
+          $pieces_debug += "Something.moved_last_turn?: #{something.moved_last_turn?}\n"
+          if something.moved_last_turn? && prev_pos == something.starting_pos
+            $pieces_debug += "Other pawn moved last turn, for the first time\n"
             special_moves_arr << df_moves[index] #Add diagonally forward move of same index
+            $pieces_debug += "Added #{df_moves[index]} to special_moves_arr\n"
           end
         end
       end

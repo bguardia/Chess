@@ -46,10 +46,11 @@ describe Movement do
   include Movement
   
 
-  describe "#from" do
+  describe "#moves" do
     it "creates and returns a new Movement::MovementArray" do
       pawn = create_piece_stub
-      marr = from(pawn)
+      board = Board.new
+      marr = moves(pawn, board)
       expect(marr).to be_a_kind_of(Movement::MovementArray)
     end
   end
@@ -119,6 +120,7 @@ describe Movement do
       bishop = Bishop.new(starting_pos: [5,5], team: "black")
       pawn = Pawn.new(starting_pos: [6,7], team: "white")
       board = Board.new(pieces: [king, rook, bishop, pawn])
+      puts board
       expect(Movement.checkmate?(king, board)).to be true
     end
   end
@@ -168,7 +170,7 @@ describe Movement do
       piece = create_piece_stub 
       board = Board.new
       piece.add_to_board(board)
-      marr = Movement::MovementArray.new(piece)
+      marr = Movement::MovementArray.new(piece, board)
       moves_arr = []
 
       moves_arr << marr.send(msg, 2).spaces(on_board: false)
@@ -227,7 +229,7 @@ describe Movement do
         piece = create_piece_stub
         board = Board.new
         piece.add_to_board(board)
-        marr = Movement::MovementArray.new(piece)
+        marr = Movement::MovementArray.new(piece, board)
         moves = marr.up(2).and.left(1).spaces(on_board: false)
         expect(moves).to match_array [[-2, -1]]
       end
@@ -238,7 +240,7 @@ describe Movement do
         piece = create_piece_stub
         board = Board.new
         piece.add_to_board(board)
-        marr = Movement::MovementArray.new(piece)
+        marr = Movement::MovementArray.new(piece, board)
         moves = marr.up(2).and.left(1).or.down(1).and.right(2).spaces(on_board: false)
         expect(moves).to match_array [[-2,-1], [1, 2]]
       end
@@ -249,7 +251,7 @@ describe Movement do
         piece = create_piece_stub
         board = Board.new
         piece.add_to_board(board)
-        marr = Movement::MovementArray.new(piece)
+        marr = Movement::MovementArray.new(piece, board)
         moves = marr.down(1).spaces
         expect(moves).to be_a_kind_of(Array)
       end
