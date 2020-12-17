@@ -263,10 +263,10 @@ module Movement
   end
 =end
 
-  def self.who_can_reach?(space, board, args = {})
+  def self.who_can_reach?(pos, board, args = {})
     pieces = board.get_pieces(args)
     pieces.filter! do |piece|
-      piece.possible_moves.include?(space)
+      piece.can_move_to?(pos, board)
     end
 
     return pieces
@@ -306,11 +306,11 @@ module Movement
 
     enemy_pieces = board.get_pieces(team: op_team)
 
-    king_pos = board.get_coords(king)
+    king_pos = king.current_pos
     #$pieces_debug+=  "king's position is: #{king_pos}"
 
     can_reach = enemy_pieces.filter do |piece|
-      piece.possible_moves(board).include?(king_pos)
+      piece.can_move_to?(king_pos, board)
     end
 
     return nil if can_reach.empty?
@@ -318,18 +318,15 @@ module Movement
   end
 
   def self.checkmate?(king, board)
-    #$game_debug += "Movement.checkmate? called\n"
+    #return false unless king is in check
     can_reach = in_check?(king, board)
     return false unless can_reach
-    #$game_debug += "king is currently in check\n"
 
     pieces = board.get_pieces(team: king.team)
-    
-    #$game_debug += "king's team is: #{king.team}\n"
-    #$game_debug += "pieces are:\n#{pieces}\n"
 
+    #first check if king can escape from check on its own
     king_can_escape = king.possible_moves(board).any? do |move|
-      sim_board = board.simulate_move(king, move)
+      sim_board = board.simulate_move(move)
       !Movement.in_check?(king, sim_board)
     end
 
@@ -338,28 +335,46 @@ module Movement
     #get important spaces to help cut down on calculations
     #important spaces include spaces between king and attacker,
     #as well as attacker positions
-    king_pos = board.get_coords(king)
+    king_pos = king.current_pos
     important_spaces = []
     can_reach.each do |attacker|
-      attack_pos = board.get_coords(attacker)
+      attack_pos = attacker.current_pos
       important_spaces << Movement.get_spaces_between(king_pos, attack_pos)
       important_spaces << attack_pos
     end 
 
+    #check possible moves of other ally pieces
     checkmate = pieces.all? do |piece|
       $game_debug += "For #{piece.class} (id: #{piece.id})\n"
-      piece.possible_moves(board).all? do |move|
+      piece.possible_moves(board).all? do |mv|
         #if move can block or take attacking piece
         #simulate move and check state
-        if important_spaces.include?(move)
-          sim_board = board.simulate_move(piece, move)
-          Movement.in_check?(king, sim_board)
-        else
-          true
+        mv.any? do |id, pos|
+          if important_spaces.include?(pos)
+            sim_board = board.simulate_move(mv)
+            Movement.in_check?(king, sim_board)
+          else
+            true
+          end
         end
       end
     end
     return checkmate
+  end
+
+  def self.return_move(piece_pos, dest_pos, board)
+    piece = board.get_piece_at(piece_pos)
+    moves = piece.possible_moves(board)
+
+    #check for any moves matching given destination
+    #and return first match
+    moves.each do |mv|
+      if mv[piece.id] == dest_pos
+        return mv
+      end
+    end
+    #return nil if none match
+    return nil
   end
 end
 

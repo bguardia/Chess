@@ -128,7 +128,7 @@ ensure
   Curses.close_screen
   puts $game_debug
   #puts $window_debug
-  #puts $board_debug
+  puts $board_debug
   #puts $pieces_debug
   #puts $chess_debug
 end

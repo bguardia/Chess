@@ -94,6 +94,7 @@ class Board
     x = pos[0]
     y = pos[1]
     @arr[x][y] = piece
+    piece.set_pos(pos)
   end
 
   def move(piece, pos)
@@ -107,6 +108,16 @@ class Board
     place(piece, pos)
     piece.set_moved(true)
     update_gamestate
+  end
+
+  def get_piece(args = {})
+    piece = get_pieces(args.merge({first: true}))
+    $board_debug += "get_piece called. returned: #{piece}"
+    if piece.empty?
+      return nil
+    else
+      return piece
+    end
   end
 
   def get_pieces(args = {})
@@ -124,11 +135,16 @@ class Board
               space.instance_variable_get(inst_var) == args[key]
             end
           end
-          pieces << space if match_all
+          if match_all 
+            if args.fetch(:first, false)
+              return space
+            else
+              pieces << space if match_all
+            end
+          end
         end
       end
     end
-
     return pieces
   end
 
@@ -160,6 +176,11 @@ class Board
     else
       return false
     end
+  end
+
+  def remove(piece)
+    pos = get_coords(piece)
+    remove_at(pos)
   end
 
   def remove_at(pos)
@@ -236,15 +257,31 @@ class Board
     end 
   end
 
-  def simulate_move(piece, pos)
+  def simulate_move(move)
     dup_arr = @arr.map do |row|
       row.dup.map do |cell|
         cell.dup
       end
     end
+
     sim_board = Board.new(arr: dup_arr)
-    sim_board.move(piece, pos)
+    sim_board.do(move)
     return sim_board
+  end
+
+  def do(move)
+    move.each do |id, pos|
+      piece = get_pieces(id: id)[0]
+      if pos
+        prev_pos = get_coords(piece)
+        place(piece, pos)
+        piece.set_moved(true)
+        remove_at(prev_pos)
+      else
+        remove(piece)
+      end
+    end
+    update_gamestate
   end
 
   public
