@@ -208,26 +208,6 @@ module Movement
 
   end
 
-=begin
-  def self.get_possible_moves(piece, board, include_special_moves = true)
-    #Get all possible moves from current location
-    possible_moves = piece.possible_moves(board)
-
-    #Remove moves that are off-board or blocked
-    possible_moves.filter! do |move|
-      board.cell_exists?(move) && !blocked?(piece, move, board)
-    end
-
-    #Get special moves
-    if include_special_moves
-      special_moves = piece.special_moves(board)
-      possible_moves << special_moves unless special_moves.nil? 
-    end
-
-    return possible_moves  
-  end
-=end
-
   def self.blocked?(piece, move, board, args = {})
     #return false if piece.kind_of?(Knight) #Knights can jump over pieces
     unless piece.kind_of?(Knight)
@@ -254,14 +234,6 @@ module Movement
 
     return false
   end
-
-=begin
-  def self.possible_move?(piece, move, board, args = {})
-    moves = Movement.get_possible_moves(piece, board, true)
-    return false if moves.empty?
-    return moves.include?(move)
-  end
-=end
 
   def self.who_can_reach?(pos, board, args = {})
     pieces = board.get_pieces(args)
@@ -322,12 +294,13 @@ module Movement
     can_reach = in_check?(king, board)
     return false unless can_reach
 
-    pieces = board.get_pieces(team: king.team)
 
     #first check if king can escape from check on its own
     king_can_escape = king.possible_moves(board).any? do |move|
-      sim_board = board.simulate_move(move)
-      !Movement.in_check?(king, sim_board)
+      board.do(move)
+      not_in_check = !Movement.in_check?(king, board)
+      board.undo(move)
+      not_in_check
     end
 
     return false if king_can_escape
@@ -344,15 +317,19 @@ module Movement
     end 
 
     #check possible moves of other ally pieces
+    pieces = board.get_pieces(team: king.team)
     checkmate = pieces.all? do |piece|
       $game_debug += "For #{piece.class} (id: #{piece.id})\n"
       piece.possible_moves(board).all? do |mv|
         #if move can block or take attacking piece
         #simulate move and check state
-        mv.any? do |id, pos|
+        mv.all? do |piece, pos_arr|
+          pos = pos_arr[1]
           if important_spaces.include?(pos)
-            sim_board = board.simulate_move(mv)
-            Movement.in_check?(king, sim_board)
+            board.do(mv)
+            check = Movement.in_check?(king, sim_board)
+            board.undo(mv)
+            check
           else
             true
           end
@@ -369,12 +346,93 @@ module Movement
     #check for any moves matching given destination
     #and return first match
     moves.each do |mv|
-      if mv[piece.id] == dest_pos
+      if mv[piece][1] == dest_pos
         return mv
       end
     end
     #return nil if none match
-    return nil
+    return { nil => nil }
+  end
+
+  def self.create_move(piece1, dest_pos1, piece2 = nil, dest_pos2 = nil)
+    move =  { piece1 => [piece1.current_pos, dest_pos1] }
+      if piece2
+        move = Movement.add_to_move(move, piece2, dest_pos2)
+      end
+
+    return move
+  end
+
+  def self.add_to_move(move, piece2, dest_pos2)
+     move.merge({ piece2 => [piece2.current_pos, dest_pos2] })
+  end
+
+  def promotion?(piece)
+    if piece.kind_of?(Pawn)
+      final_rank = piece.team == "white" ? 0 : 7
+      if piece.current_pos[0] == final_rank
+        return true
+      end
+    end
+    return false
+  end
+end
+
+
+class Move
+  attr_reader :piece, :prev_pos, :pos, :removed, :castle, :promotion, :notation
+  
+  def initialize(board, args)
+    @moves = []
+    @piece = args.fetch(:piece)
+    @prev_pos = args.fetch(:prev_pos)
+    @pos = args.fetch(:pos)
+    @removed = args.fetch(:removed, nil)
+    @castle = args.fetch(:castle, false)
+    @promotion = args.fetch(:promotion, false)
+    @notation = args.fetch(:notation, false) || ChessNotation.to_notation(@prev_pos, @pos, @board)
+  end
+
+  def get_from_notation(note, board)
+    ChessNotation.from_notation(note, board)
+  end
+
+  def get_notation(prev_pos, pos, board)
+    ChessNotation.get_notation(prev_pos, pos, board)
+  end
+
+  def get_from_array(pos_arr, board)
+    $game_debug += "called Move.get_from_array(#{pos_arr}, board)\n"
+    ChessNotation.translate_move(pos_arr[0], pos_arr[1], board)
+  end
+
+  def self.simulate(board, prev_pos, pos)
+    Move.new(board, [prev_pos, pos])
+  end
+
+  def set_removed(removed)
+    @removed = removed
+  end
+
+  def get_removed
+    @removed
+  end
+
+  def get_move
+    { piece: @piece,
+      pos: @new_pos } 
+  end
+
+  def reverse_move
+    { piece: @piece,
+      pos: @prev_pos }
+  end
+
+  def do(board)
+    board.move(@piece, @pos)
+    if @castle
+      board.move(@castle[:piece], @castle[:pos]) 
+    end
   end
 end
 

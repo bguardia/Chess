@@ -70,11 +70,7 @@ class Game
  end
 
  def game_over?
-     $game_debug += "game_over?: @current_player.team: #{@current_player.team}\n"
-     king = @board.get_pieces(type: "King", team: @current_player.team)[0]
-     $game_debug += "game_over?: king is #{king}\n"
-     $game_debug += "board is:\n #{@board.to_s}"
-     return Movement.checkmate?(king, @board)
+   return @board.checkmate?(@current_player.team)
  end
 
  def start
@@ -148,14 +144,14 @@ class Game
  end
  
  def valid?(move)
-   piece = @board.get_pieces(id: move.keys.first)[0]
+   piece = move.keys.first 
    
    unless piece
      @msg_arr << "Not a valid move"
      return false
    end
 
-   pos = move[piece.id]
+   pos = move[piece][1]
    removed = @board.get_piece_at(pos)
 
    unless piece.team == @current_player.team
@@ -176,14 +172,14 @@ class Game
      return false
    end
 
-   #King must not be in check after move
-   sim_board = @board.copy
-   sim_king = sim_board.get_pieces(type: "King", team: piece.team)[0]
-   sim_prev_pos = board.get_coords(piece)
-   sim_move = Move.simulate(sim_board, sim_prev_pos, pos)
-   sim_move.do(sim_board)
-   check_after_move = Movement.in_check?(sim_king, sim_board)
-   if check_after_move
+   #Check for check
+   check_before_move = @board.in_check?(team: piece.team)
+   @board.do(move)
+   check_after_move = @board.in_check?(team: piece.team)
+   @board.undo(move)
+   if check_before_move && check_after_move
+     @msg_arr << "King is still in check."
+   elsif check_after_move
      @msg_arr << "Move puts king in check."
      return false
    end
@@ -354,25 +350,21 @@ module ChessNotation
      current_pos_arr = []
      dest_pos_arr = []
 
-     move.each_key do |key|
-       piece = board.get_pieces(id: key)[0]
-       current_pos = board.get_coords(pieces.last)
+     move.each_key do |piece|
+       current_pos = move[piece][0]
        #if this is the second piece and its current_pos
        #matchs the first's destination, it represents a normal move
        unless pieces.first && dest_pos_arr.first == current_pos
          pieces << piece
          current_pos_arr << current_pos
-         dest_pos_arr << move[key]
+         dest_pos_arr << move[piece][1]
        end
      end
 
      dest_pos = dest_pos_arr.first
      capture = promotion = en_passant = ""
      if pieces.length > 1
-       if dest_pos_arr.first == current_pos_arr.last
-         capture = "x"
-       end
-
+     
        if pieces.first.kind_of?(King) && pieces.last.kind_of?(Rook)
          return castle_notation(piece.first, current_pos_arr.first, dest_pos)
        end
@@ -380,21 +372,25 @@ module ChessNotation
        if pieces.first.kind_of?(Pawn)
          if pieces.first.team == pieces.last.team
            promotion = "=#{to_piece_char(pieces.last)}"
-         else
+         elsif dest_pos_arr.first != current_pos_arr.last
            en_passant = "e.p."
+           capture = "x"
          end
        end
      end
-     
+
+     if pieces.length > 1 && dest_pos_arr.last == nil 
+         capture = "x"
+     end
+
      detail = clarify_notation(pieces.first, dest_pos, board)
 
      #check for check/checkmate 
      check = ""
      enemy_team = ["white", "black"].find { |t| t != pieces.first.team }
-     enemy_king = board.get_pieces(type: "King", team: enemy_team)[0]
-     if Movement.in_check?(enemy_king, board)
+     if board.in_check?(team: enemy_team)
        check = "+"
-       if Movement.checkmate?(enemy_king, board)
+       if board.checkmate?(enemy_team)
          check = "#"
        end
      end
@@ -583,14 +579,14 @@ module ChessNotation
      
      #Select a piece which can do the same move
      other = similar_pieces.find do |p|
-       p.object_id != piece.object_id && p.can_move_to?(move, board)
+       p.id != piece.id && p.can_move_to?(move, board)
      end
 
      #return if no other piece exists
      return "" if other.nil?
 
      #Return file if rank is same, rank otherwise
-     this_pos = board.get_coords(piece)
+     piece_pos = board.get_coords(piece)
      other_pos = board.get_coords(piece)
      if other_pos[0] == piece_pos[0]
        to_file(piece_pos)

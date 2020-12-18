@@ -270,18 +270,78 @@ class Board
   end
 
   def do(move)
-    move.each do |id, pos|
-      piece = get_pieces(id: id)[0]
-      if pos
-        prev_pos = get_coords(piece)
-        place(piece, pos)
-        piece.set_moved(true)
-        remove_at(prev_pos)
-      else
-        remove(piece)
-      end
+    move.each do |piece, pos_arr|
+      prev_pos = pos_arr[0]
+      pos = pos_arr[1]
+      place(piece, pos) if pos
+      piece.set_moved(true)
+      remove_at(prev_pos)
     end
     update_gamestate
+  end
+
+  def undo(move)
+    move.each do |piece, pos_arr|
+      prev_pos = pos_arr[0]
+      current_pos = pos_arr[1]
+      place(piece, prev_pos)
+      remove_at(current_pos) if current_pos
+    end
+  end
+
+  def in_check?(args)
+    team = args.fetch(:team, nil)
+    king = args.fetch(:king, nil)|| get_pieces(type: "King", team: team)[0]
+    team ||= king.team
+
+    king_pos = get_coords(king)
+    enemy_pieces = get_pieces.filter { |p| p.team != team }
+    attackers = enemy_pieces.filter do |ep|
+      ep.can_move_to?(king_pos, self)
+    end
+
+    return nil if attackers.empty?
+    return attackers
+  end
+
+  def checkmate?(team)
+    attackers = in_check?(team: team)
+    return false unless attackers
+    
+    #get team's king and check if king can escape on its own
+    king = get_pieces(type: "King", team: team)[0]
+    king_cant_escape = king.possible_moves(self).all? do |mv|
+      self.do(mv)
+      check = in_check?(king: king)
+      self.undo(mv)
+      check
+    end
+
+    return false unless king_cant_escape
+
+    #get important spaces (spaces between king and attackers, and attacker positions)
+    king_pos = get_coords(king)
+    important_spaces = attackers.reduce([]) do |spaces, atk|
+      atk_pos = get_coords(atk)
+      spaces.concat(Movement.get_spaces_between(king_pos, atk_pos)).concat(atk_pos)
+    end
+
+    ally_pieces = get_pieces(team: team)
+
+    checkmate = ally_pieces.all? do |p|
+      p.possible_moves(self).all? do |mv|
+        if important_spaces.include?(mv[p][1])
+          self.do(mv)
+          check = in_check?(king: king)
+          self.undo(mv)
+          check
+        else
+          true
+        end
+      end
+    end
+
+    return checkmate
   end
 
   public
