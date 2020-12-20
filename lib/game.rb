@@ -1,3 +1,4 @@
+require './lib/chess.rb'
 require './lib/piece.rb'
 require './lib/player.rb'
 require 'json'
@@ -12,6 +13,7 @@ class Game
    @players = args.fetch(:players, false) || create_players
    @sets = args.fetch(:sets, false) || create_sets
    @board = args.fetch(:board, false) || Board.new 
+   @gamestate = set_gamestate
    @current_player = nil
    @io_stream = args.fetch(:io)
    $game_debug += "Game initialized with the following variables:\n" +
@@ -27,6 +29,13 @@ class Game
    [ Pieces.new_set("white"), Pieces.new_set("black") ]
  end
 
+ def set_gamestate
+  pieces = @sets.flatten
+  $game_debug += "called set_gamestate\n"
+  $game_debug += "pieces: \n#{pieces}"
+  StateTree.new(pieces)
+ end
+=begin
  def set_up_board
    @sets.each do |set|
      set.each do |piece|
@@ -35,7 +44,7 @@ class Game
    end
    board.update_gamestate
  end
-
+=end
  def set_up_messenger
    @msg_arr = []
    @messenger = List.new(height: 3, width: 30, content: @msg_arr, top: 5, left: 5, lines: 1)
@@ -54,7 +63,7 @@ class Game
  end
 
  def update_move_history(move)
-   note = ChessNotation.move_to_notation(move, @board)
+   note = ChessNotation.move_to_notation(move, @gamestate)
    l = @move_history_arr.length
    if @turn_num == l 
      @move_history_arr[@turn_num - 1] += " #{note}"
@@ -70,16 +79,22 @@ class Game
  end
 
  def game_over?
-   return @board.checkmate?(@current_player.team)
+   return @gamestate.checkmate?(@current_player.team)
  end
 
  def start
-   set_up_board
+   #set_up_board
    set_up_messenger
    set_up_move_history
    @players[0].team = "white"
    @players[1].team = "black"
    @current_player = @players[0]
+   
+   piece_observer = Observer.new(to_do: ->(state) { Piece.update_pieces(state) })
+   board_observer = Observer.new(to_do: ->(state) { @board.update(state) })
+   @gamestate.add_observer(piece_observer)
+   @gamestate.add_observer(board_observer)
+   @gamestate.notify_observers
 
    @turn_num = 1
    play
@@ -124,7 +139,7 @@ class Game
        break if valid_move
    end
 
-   @board.do(move)
+   @gamestate.do!(move)
 =begin
    if input.kind_of?(String)
      notation = input
@@ -137,11 +152,11 @@ class Game
 
  def to_move(input)
    if input.kind_of?(String)
-     move = ChessNotation.from_notation(input, @board)
+     move = ChessNotation.from_notation(input, @gamestate)
    else
      piece_pos = input[0]
      dest_pos = input[1]
-     move = Movement.return_move(piece_pos, dest_pos, @board)
+     move = Movement.return_move(piece_pos, dest_pos, @gamestate)
    end
 
    return move
@@ -156,7 +171,7 @@ class Game
    end
 
    pos = move.destination(piece)
-   removed = @board.get_piece_at(pos)
+   removed = @gamestate.get_piece_at(pos)
 
    unless piece.team == @current_player.team
      @msg_arr << "You can only move pieces on your team (#{@current_player.team})."
@@ -165,7 +180,7 @@ class Game
 
    #Must be a possible move of the piece
 
-   unless piece.can_move_to?(pos, @board)
+   unless piece.can_reach?(pos)
      @msg_arr << "#{piece.to_s} cannot move there."
      return false
    end
@@ -177,10 +192,10 @@ class Game
    end
 
    #Check for check
-   check_before_move = @board.in_check?(team: piece.team)
-   @board.do(move)
-   check_after_move = @board.in_check?(team: piece.team)
-   @board.undo(move)
+   check_before_move = @gamestate.in_check?(team: piece.team)
+   @gamestate.do!(move)
+   check_after_move = @gamestate.in_check?(team: piece.team)
+   @gamestate.undo
    if check_before_move && check_after_move
      @msg_arr << "King is still in check."
    elsif check_after_move
@@ -227,88 +242,6 @@ class Game
  def self.load(saved_game); end
 end
 
-=begin
-class Move
-  attr_reader :piece, :prev_pos, :pos, :removed, :castle, :promotion, :notation, :legible
-  
-  def initialize(board, args)
-    $game_debug += "Move.new called. args are: #{args}\n"
-    @board = board
-  
-    if args.kind_of?(String)
-      @notation = args
-      args = get_from_notation(@notation, @board)
-    else
-      args = get_from_array(args, @board)
-    end
-
-    unless args.fetch(:piece) && args.fetch(:pos)
-      @legible = false      
-    else
-      @legible = true
-      initialize_vars(args)
-    end
-
-=begin
-    $game_debug += "Move initialized with following variables:\n" +
-                   "@piece: #{@piece}\n@prev_pos: #{@prev_pos}\n@pos: #{@pos}\n" +
-                   "@removed: #{@removed}\n@castle: #{@castle}\n@promotion: #{@promotion}\n"
-=end  
-  end
-
-  def initialize_vars(args)
-    @piece = args.fetch(:piece)
-    @prev_pos = args.fetch(:prev_pos)
-    @pos = args.fetch(:pos)
-    @removed = args.fetch(:removed, nil)
-    @castle = args.fetch(:castle, false)
-    @promotion = args.fetch(:promotion, false)
-    @notation ||= ChessNotation.to_notation(@prev_pos, @pos, @board)
-  end
-
-  def get_from_notation(note, board)
-    ChessNotation.from_notation(note, board)
-  end
-
-  def get_notation(prev_pos, pos, board)
-    ChessNotation.get_notation(prev_pos, pos, board)
-  end
-
-  def get_from_array(pos_arr, board)
-    $game_debug += "called Move.get_from_array(#{pos_arr}, board)\n"
-    ChessNotation.translate_move(pos_arr[0], pos_arr[1], board)
-  end
-
-  def self.simulate(board, prev_pos, pos)
-    Move.new(board, [prev_pos, pos])
-  end
-
-  def set_removed(removed)
-    @removed = removed
-  end
-
-  def get_removed
-    @removed
-  end
-
-  def get_move
-    { piece: @piece,
-      pos: @new_pos } 
-  end
-
-  def reverse_move
-    { piece: @piece,
-      pos: @prev_pos }
-  end
-
-  def do(board)
-    board.move(@piece, @pos)
-    if @castle
-      board.move(@castle[:piece], @castle[:pos]) 
-    end
-  end
-end
-=end
 module ChessNotation
 
    @@rank = [8, 7, 6, 5, 4, 3, 2, 1]
@@ -349,41 +282,7 @@ module ChessNotation
      return move_hash 
    end
 
-   def self.unravel_move(move, board)
-
-     pieces = []
-     current_pos_arr = []
-     dest_pos_arr = []
-=begin
-     move.each_key do |piece|
-       current_pos = move[piece][0]
-       #if this is the second piece and its current_pos
-       #matchs the first's destination, it represents a normal move
-       unless pieces.first && dest_pos_arr.first == current_pos
-         pieces << piece
-         current_pos_arr << current_pos
-         dest_pos_arr << move[piece][1]
-       end
-     end
-
-     dest_pos = dest_pos_arr.first
-     capture = promotion = en_passant = ""
-     if pieces.length > 1
-     
-       if pieces.first.kind_of?(King) && pieces.last.kind_of?(Rook)
-         return castle_notation(piece.first, current_pos_arr.first, dest_pos)
-       end
-
-       if pieces.first.kind_of?(Pawn)
-         if pieces.first.team == pieces.last.team
-           promotion = "=#{to_piece_char(pieces.last)}"
-         elsif dest_pos_arr.first != current_pos_arr.last
-           en_passant = "e.p."
-           capture = "x"
-         end
-       end
-     end
-=end
+   def self.unravel_move(move, state)
     pieces = []
     prev_pos_arr = []
     dest_pos_arr = []
@@ -410,14 +309,14 @@ module ChessNotation
          capture = "x"
      end
 
-     detail = clarify_notation(pieces.first, dest_pos_arr.first, board)
+     detail = clarify_notation(pieces.first, dest_pos_arr.first, state)
 
      #check for check/checkmate 
      check = ""
      enemy_team = ["white", "black"].find { |t| t != pieces.first.team }
-     if board.in_check?(team: enemy_team)
+     if state.in_check?(team: enemy_team)
        check = "+"
-       if board.checkmate?(enemy_team)
+       if state.checkmate?(enemy_team)
          check = "#"
        end
      end
@@ -428,14 +327,14 @@ module ChessNotation
 
    end
 
-   def self.move_to_notation(move, board)
-     notation = self.unravel_move(move, board)
+   def self.move_to_notation(move, state)
+     notation = self.unravel_move(move, state)
    end
 
    #public interface from game move to chess notation
-   def self.to_notation(prev_pos, new_pos, board)
-     piece = board.get_piece_at(prev_pos)
-     new_pos_piece = board.get_piece_at(new_pos)
+   def self.to_notation(prev_pos, new_pos, state)
+     piece = state.get_piece_at(prev_pos)
+     new_pos_piece = state.get_piece_at(new_pos)
 
      #check for castle
      if piece.kind_of?(King) && (prev_pos[1] - new_pos[1]).abs > 1
@@ -450,7 +349,7 @@ module ChessNotation
      end
     
      #get clarifying detail if necessary
-     extra = clarify_notation(piece, new_pos, board)
+     extra = clarify_notation(piece, new_pos, state)
      
      #notation string
      to_piece_char(piece) + extra + cap_char + to_file(new_pos) + to_rank(new_pos).to_s
@@ -559,7 +458,7 @@ module ChessNotation
      end
    end
 
-   def self.from_notation(note, board)
+   def self.from_notation(note, state)
      note = clean(note)
      return nil if note.nil?
 
@@ -577,10 +476,10 @@ module ChessNotation
      pos = [from_rank(r), from_file(f)]
 
      #Get pieces of the same type who can reach the position
-     possible_pieces = Movement.who_can_reach?(pos, board, type: p)
+     possible_pieces = Movement.who_can_reach?(pos, state, type: p)
      if possible_pieces.length > 1
        piece = possible_pieces.find do |p|
-         current_pos = board.get_coords(p)
+         current_pos = state.get_pos(p)
          current_pos[0] == dtl[0] || current_pos[1] == dtl[1]
        end
      elsif possible_pieces.length == 0
@@ -591,7 +490,7 @@ module ChessNotation
 
      #Return move
      move_hash = { piece: piece, 
-                   prev_pos: board.get_coords(piece), 
+                   prev_pos: state.get_pos(piece), 
                    pos: pos, 
                    capture: capture,
                    removed: board.get_piece_at(pos) }
@@ -599,23 +498,23 @@ module ChessNotation
 
    #return any clarifying notes if piece & move combo are unclear
    #otherwise returns an empty string
-   def self.clarify_notation(piece, move, board)
+   def self.clarify_notation(piece, move, state)
      #gets set of moved piece
      team = piece.team
-     similar_pieces = board.get_pieces(type: piece.class.to_s, team: team)
+     similar_pieces = state.get_pieces(type: piece.class.to_s, team: team)
      #Get all pieces that are same kind as piece
      
      #Select a piece which can do the same move
      other = similar_pieces.find do |p|
-       p.id != piece.id && p.can_move_to?(move, board)
+       p.id != piece.id && p.can_reach?(move)
      end
 
      #return if no other piece exists
      return "" if other.nil?
 
      #Return file if rank is same, rank otherwise
-     piece_pos = board.get_coords(piece)
-     other_pos = board.get_coords(piece)
+     piece_pos = state.get_pos(piece)
+     other_pos = state.get_pos(piece)
      if other_pos[0] == piece_pos[0]
        to_file(piece_pos)
      else

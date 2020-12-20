@@ -18,7 +18,7 @@ module Movement
     def initialize(piece, board)    
       @piece = piece
       @board = board
-      @origin = board.get_coords(piece)
+      @origin = board.get_pos(piece)
       @moves = []
       @modifiable_moves = [[0,0]]
       $movement_debug += "MovementArray.new called. @piece: #{@piece.class}, @origin: #{@origin}\n"
@@ -189,7 +189,11 @@ module Movement
       
       $movement_debug += "Spaces called. Calculated positions are: #{moves}\n"
 
-      on_board = moves.filter { |move| @board.cell_exists?(move) }
+      on_board = moves.filter do |pos|
+        valid_r = pos[0] >= 0 && pos[0] <= 7
+        valid_f = pos[1] >= 0 && pos[1] <= 7
+        valid_r && valid_f
+      end
 
       $movement_debug += "Positions off board have been filtered. Now: #{on_board}\n"
 
@@ -224,7 +228,7 @@ module Movement
     #return false if piece.kind_of?(Knight) #Knights can jump over pieces
     unless piece.kind_of?(Knight)
       #get the number of spaces between current_pos and move
-      pos = board.get_coords(piece)
+      pos = board.get_pos(piece)
       spaces_between = get_spaces_between(pos, move)
 
       #If piece is a pawn, add destination to spaces_between array
@@ -308,7 +312,7 @@ module Movement
 
 
     #first check if king can escape from check on its own
-    king_can_escape = king.possible_moves(board).any? do |move|
+    king_can_escape = king.possible_moves.any? do |move|
       board.do(move)
       not_in_check = !Movement.in_check?(king, board)
       board.undo(move)
@@ -331,7 +335,7 @@ module Movement
     #check possible moves of other ally pieces
     pieces = board.get_pieces(team: king.team)
     checkmate = pieces.all? do |piece|
-      piece.possible_moves(board).all? do |mv|
+      piece.possible_moves.all? do |mv|
         #if move can block or take attacking piece
         #simulate move and check state
         mv.all? do |piece, pos_arr|
@@ -353,7 +357,9 @@ module Movement
   def self.return_move(piece_pos, dest_pos, board)
     $game_debug += "called Movement.return_move(#{piece_pos}, #{dest_pos}, board)\n"
     piece = board.get_piece_at(piece_pos)
-    moves = piece.possible_moves(board)
+    return EmptyMove.new if piece.nil?
+
+    moves = piece.possible_moves
 
     $game_debug += "Piece is: #{piece.class} (#{piece.id})\n"
     $game_debug += "Moves are:\n"

@@ -81,21 +81,31 @@ class Piece
 
   @@next_piece_id = 0
   @@moved_last_turn = nil #stores the piece that moved last
+  @@pieces = []
 
-  attr_reader :team, :board, :id
+  attr_reader :team, :id
 
   def initialize(args = {})
     @team = args.fetch(:team, "")
     @starting_pos = args.fetch(:starting_pos, [0,0]) 
-    @current_pos = nil
+    @current_pos = @starting_pos 
     @icon = args.fetch(:icon, false) || get_icon
     @moved = args.fetch(:moved, false)
     @id = @@next_piece_id
     @@next_piece_id += 1
+    @@pieces << self
   end
 
   def set_pos(pos)
     @current_pos = pos
+  end
+
+  def set_moves(moves)
+    @possible_moves = moves
+  end
+
+  def set_moved(bool)
+    @moved = bool
   end
 
   def starting_pos
@@ -135,45 +145,52 @@ class Piece
     Kernel.const_get(data[:class]).new(data)
   end
 
-  public
-  def moved_last_turn?(board)
-    last_moved = board.return_last_moved
-    #$pieces_debug += "last_moved: #{last_moved} (id: #{last_moved.id}\n"
-    self == board.return_last_moved 
+  def self.create_observer
+    Observer.new(to_do:->(state) { self.update_pieces(state) })
+  end
+
+  def self.update_pieces(state)
+    @@pieces.each do |piece|
+      pos = state.get_pos(piece)
+      moves = state.get_moves(id: piece.id).flatten
+      moved = state.get_moved_status(piece)
+      piece.set_pos(pos)
+      piece.set_moves(moves)
+      piece.set_moved(moved)
+    end
   end
 
   #Subclasses must define their own behavior for possible_moves and special_moves
   #Special moves are any moves that require a greater context, such as en passant or castling,
   #therefore requiring board to be passed as an argument
-  def possible_moves(board)
-    moves = normal_moves(board).map { |pos| Movement.create_move([[self, self.current_pos, pos]], :normal)  }  
-    moves.concat(special_moves(board))
+  def generate_possible_moves(state)
+    moves = normal_moves(state).map { |pos| Movement.create_move([[self, self.current_pos, pos]], :normal)  }  
+    moves.concat(special_moves(state))
 
-    $pieces_debug += "#{self.class} (#{self.id}).possible_moves(board):\n"
+    $pieces_debug += "#{self.class} (#{self.id}).possible_moves(state):\n"
     moves.each do |mv|
       $pieces_debug += mv.to_s
     end
+
     return moves
   end
 
+  def possible_moves
+    @possible_moves
+  end
   def normal_moves(board); end
   def special_moves(board) 
     []
   end
 
-  def can_move_to?(pos, board)
-    moves = possible_moves(board)
-    moves.any? do |mv|
-      mv.destination(self) == pos
-    end
-  end
-
-  def set_moved(bool)
-    @moved = bool
-  end
-
   def moved?
     @moved
+  end
+
+  def can_reach?(pos)
+    @possible_moves.any? do |move|
+      move.destination(self) == pos
+    end
   end
 
   def add_to_board(board)
@@ -206,8 +223,8 @@ class Queen < Piece
     "\u265B"
   end
 
-  def normal_moves(board)
-    moves(self, board).vertically(1..7).or.
+  def normal_moves(state)
+    moves(self, state).vertically(1..7).or.
       horizontally(1..7).or.
       diagonally(1..7).spaces
   end
@@ -224,8 +241,8 @@ class Rook < Piece
     "\u265C"
   end
 
-  def normal_moves(board)
-    moves(self, board).horizontally(1..7).or.
+  def normal_moves(state)
+    moves(self, state).horizontally(1..7).or.
       vertically(1..7).spaces
   end
 
@@ -241,8 +258,8 @@ class Knight < Piece
     "\u265E"
   end
 
-  def normal_moves(board)
-    moves(self, board).horizontally(2).and.vertically(1).or.
+  def normal_moves(state)
+    moves(self, state).horizontally(2).and.vertically(1).or.
       vertically(2).and.horizontally(1).spaces
   end
 
@@ -258,22 +275,22 @@ class King < Piece
     "\u265A"
   end
 
-  def normal_moves(board)
-    moves(self, board).horizontally(1).or.vertically(1).or.diagonally(1).spaces
+  def normal_moves(state)
+    moves(self, state).horizontally(1).or.vertically(1).or.diagonally(1).spaces
   end
 
-  def special_moves(board)
+  def special_moves(state)
     special_moves_arr = []
 
     #Castling
     #Only works if king hasn't moved
     if !moved?
-      rooks = board.get_pieces(type: "Rook", team: self.team)
+      rooks = state.get_pieces(type: "Rook", team: self.team)
 
       if !rooks.empty?
         #Check if spaces_on(board) between rook and king are empty
         rooks.filter! do |rook|
-          !Movement.blocked?(rook, self.current_pos, board, ignore_dest: true)
+          !Movement.blocked?(rook, self.current_pos, state, ignore_dest: true)
         end
 
         return [] if rooks.empty?
@@ -297,7 +314,7 @@ class King < Piece
           #Get spaces_on(board) between moves
           #Check if any space between moves can be reached by an enemy piece
           !Movement.get_spaces_between(self.current_pos, move.destination(self)).any? do |space|
-            Movement.who_can_reach?(space, board).any? do |piece|
+            Movement.who_can_reach?(space, state).any? do |piece|
               piece.team != self.team
             end
           end
@@ -336,19 +353,19 @@ class Pawn < Piece
     "\u265F"
   end
 
-  def normal_moves(board)
+  def normal_moves(state)
 
     #forward movement
     unless @moved
-      moves_arr = moves(self, board).forward(1..2).spaces
+      moves_arr = moves(self, state).forward(1..2).spaces
     else
-      moves_arr = moves(self, board).forward(1).spaces
+      moves_arr = moves(self, state).forward(1).spaces
     end
 
     #diagonal movement
-    diag_capture = moves(self, board).forward(1).and.horizontally(1).spaces(pawn_cap: true)
+    diag_capture = moves(self, state).forward(1).and.horizontally(1).spaces(pawn_cap: true)
     diag_capture.each do |mv|
-      p = board.get_piece_at(mv)
+      p = state.get_piece_at(mv)
       if p && p.team != self.team
         moves_arr << mv
       end
@@ -357,22 +374,23 @@ class Pawn < Piece
     return moves_arr
   end
 
-  def special_moves(board)
+  def special_moves(state)
     special_moves_arr = []
     
     #En passant
     #If an enemy piece moves to a square horizontally adjacent to a pawn
     #the pawn can capture it on the next turn
-    current_pos = board.get_coords(self)
-    diag_moves = moves(self, board).forward(1).and.horizontally(1).spaces
+    current_pos = state.get_pos(self)
+    diag_moves = moves(self, state).forward(1).and.horizontally(1).spaces
     if (current_pos[0] - self.starting_pos[0]).abs == 3
-      adj_moves = moves(self, board).horizontally(1).spaces(pawn_cap: true)
+      adj_moves = moves(self, state).horizontally(1).spaces(pawn_cap: true)
 
       adj_moves.each_index do |index|
-        something = board.get_piece_at(adj_moves[index])
+        something = state.get_piece_at(adj_moves[index])
         if something && something.kind_of?(Pawn)
-          prev_pos = board.get_previous_pos(something)
-          if something.moved_last_turn?(board) && prev_pos == something.starting_pos
+          prev_pos = state.get_previous_pos(something)
+          moved_last_turn = state.get_last_moved == something
+          if moved_last_turn && prev_pos == something.starting_pos
             special_moves_arr << Movement.create_move([[self, self.current_pos, diag_moves[index]],
                                                        [something, something.current_pos, nil]], :en_passant)
           end

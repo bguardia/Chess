@@ -1,7 +1,7 @@
 #require 'chess'
 
 $board_debug = ""
-
+=begin
 module Gamestate
 
   REMOVED = nil
@@ -60,32 +60,29 @@ module Gamestate
     end
   end
 end
+=end
 
 class Board
-  include Gamestate
   attr_reader :arr
 
   def initialize(args = {})
     @height = args.fetch(:height, 8)
     @width = args.fetch(:width, 8)
     @arr = args.fetch(:arr, nil) || create_array
-    
-    
-    @log = []
-
-    if pieces = args.fetch(:pieces, nil)
-      pieces.each { |p| p.add_to_board(self) }
-      update_gamestate
-    end
-
   end
-
-  def update_gamestate
-    update
-  end
-
+  
   def create_array
     Array.new(@height) { Array.new(@width, nil) }
+  end
+
+  public
+  def update(state)
+    @arr.each_index do |r|
+      @arr[r].each_index do |f|
+        piece = state.get_piece_at([r, f])
+        @arr[r][f] = piece
+      end
+    end 
   end
 
   public
@@ -95,76 +92,6 @@ class Board
     y = pos[1]
     @arr[x][y] = piece
     piece.set_pos(pos)
-  end
-
-  def move(piece, pos)
-    $board_debug += "called board.move(#{piece.class}, #{pos})\n"
-
-    current_pos = get_coords(piece)
-    $board_debug += "current_pos: #{current_pos}\n"
-    return nil if current_pos.nil?
-    $board_debug += "current_pos is not nil\n"
-    remove_at(current_pos)
-    place(piece, pos)
-    piece.set_moved(true)
-    update_gamestate
-  end
-
-  def get_piece(args = {})
-    piece = get_pieces(args.merge({first: true}))
-    $board_debug += "get_piece called. returned: #{piece}"
-    if piece.empty?
-      return nil
-    else
-      return piece
-    end
-  end
-
-  def get_pieces(args = {})
-    pieces = []
-
-    @arr.each do |rank|
-      rank.each do |space|  
-        if space.kind_of?(Piece)
-          match_all = args.keys.all? do |key|
-            if key == :type
-              clz = Kernel.const_get(args[key])
-              space.kind_of?(clz)
-            else
-              inst_var = "@#{key}".to_sym
-              space.instance_variable_get(inst_var) == args[key]
-            end
-          end
-          if match_all 
-            if args.fetch(:first, false)
-              return space
-            else
-              pieces << space if match_all
-            end
-          end
-        end
-      end
-    end
-    return pieces
-  end
-
-  def get_piece_at(pos)
-    x = pos[0]
-    y = pos[1]
-
-    return @arr[x][y]
-  end
-
-  def get_coords(piece)
-    @arr.each_index do |x|
-      @arr[x].each_index do |y|
-        if @arr[x][y] == piece
-          return [x, y]
-        end
-      end
-    end
-
-    return nil
   end
 
   public
@@ -215,11 +142,7 @@ class Board
   def set_arr (arr)
     @arr = arr
   end
- 
-  def set_log(log)
-    @log = log
-  end
-
+  
   def copy
     board_copy = self.dup
     arr = @arr.map do |row|
@@ -233,18 +156,8 @@ class Board
     return board_copy
   end
 
-  def rewind(n)
-    prev_state = revert_to_previous_state(n)
-    clear
-    prev_state.each_value do |p_arr|
-      unless p_arr.nil?
-        place(p_arr[0], p_arr[1])
-      end
-    end     
-    
-  end
-
-  def get_previous_pos(piece)
+=begin
+   def get_previous_pos(piece)
     $board_debug += "called get_previous_pos\n"
     return nil if piece.nil?
     prev_state = get_previous_state(1)
@@ -256,90 +169,7 @@ class Board
       return nil
     end 
   end
-
-  def simulate_move(move)
-    dup_arr = @arr.map do |row|
-      row.dup.map do |cell|
-        cell.dup
-      end
-    end
-
-    sim_board = Board.new(arr: dup_arr)
-    sim_board.do(move)
-    return sim_board
-  end
-
-  def do(move)
-    move.each do |piece, current_pos, dest_pos|
-      place(piece, dest_pos) if dest_pos
-      piece.set_moved(true)
-      remove_at(current_pos)
-    end
-    update_gamestate
-  end
-
-  def undo(move)
-    move.each do |piece, prev_pos, current_pos|
-      place(piece, prev_pos)
-      remove_at(current_pos) if current_pos
-    end
-    revert_to_previous_state(1)
-  end
-
-  def in_check?(args)
-    team = args.fetch(:team, nil)
-    king = args.fetch(:king, nil)|| get_pieces(type: "King", team: team)[0]
-    team ||= king.team
-
-    king_pos = get_coords(king)
-    enemy_pieces = get_pieces.filter { |p| p.team != team }
-    attackers = enemy_pieces.filter do |ep|
-      ep.can_move_to?(king_pos, self)
-    end
-
-    return nil if attackers.empty?
-    return attackers
-  end
-
-  def checkmate?(team)
-    attackers = in_check?(team: team)
-    return false unless attackers
-    
-    #get team's king and check if king can escape on its own
-    king = get_pieces(type: "King", team: team)[0]
-    king_cant_escape = king.possible_moves(self).all? do |mv|
-      self.do(mv)
-      check = in_check?(king: king)
-      self.undo(mv)
-      check
-    end
-
-    return false unless king_cant_escape
-
-    #get important spaces (spaces between king and attackers, and attacker positions)
-    king_pos = get_coords(king)
-    important_spaces = attackers.reduce([]) do |spaces, atk|
-      atk_pos = get_coords(atk)
-      spaces.concat(Movement.get_spaces_between(king_pos, atk_pos)).concat(atk_pos)
-    end
-
-    ally_pieces = get_pieces(team: team)
-
-    checkmate = ally_pieces.all? do |p|
-      p.possible_moves(self).all? do |mv|
-        if important_spaces.include?(mv[p][1])
-          self.do(mv)
-          check = in_check?(king: king)
-          self.undo(mv)
-          check
-        else
-          true
-        end
-      end
-    end
-
-    return checkmate
-  end
+=end
 
   public
   def to_s
@@ -358,4 +188,413 @@ class Board
 
 end
 
+class Node
 
+  def initialize(data = nil, parent = nil)
+    @parent_node = parent
+    @data = data
+    @child_nodes = []
+  end
+
+  def set_parent(parent)
+    @parent_node = parent
+  end
+
+  def parent_node
+    @parent_node
+  end
+
+  def data
+    @data
+  end
+
+  def child_nodes
+    @child_nodes
+  end
+
+  def add_child(child_node)
+    @child_nodes << child_node
+    child_node.set_parent(self)
+  end
+
+  def remove_child(child_node)
+  end
+end
+
+module TreeSearch
+
+  def bf_search_by_block(parent_node, &block)
+    queue = [parent_node]
+    loop do
+      break if queue.empty?
+      current_node = queue.shift
+      block.call(current_node)
+      queue.concat(current_node.child_nodes)
+    end
+
+    return nil
+  end
+
+  def df_search_by_block(parent_node, &block)
+    stack = [parent_node]
+    loop do
+      break if stack.empty?
+      current_node = stack.pop
+      block.call(current_node)
+      stack.concat(current_node.child_nodes)
+    end
+
+    return nil
+  end
+end
+
+class StateTree
+
+  def initialize(pieces)
+    @first_node = Node.new(State.new(pieces: pieces))
+    @current_node = @first_node
+    @observers = []
+  end
+
+  def set_current_node(node)
+    @current_node = node
+    notify_observers
+  end
+
+  def add_observer(o)
+    @observers << o
+  end
+
+  public
+  def notify_observers
+    @observers.each do |o|
+      o.update(self) #send current state data
+    end
+  end
+
+  def do(move)
+    next_state = @current_node.child_nodes.find do |node|
+      state = node.data
+      state.last_move == move
+    end
+    
+    if next_state
+      next_state
+    else
+      new_state(move)
+    end
+  end
+
+  def do!(move)
+    set_current_node(self.do(move))
+  end
+
+  def new_state(move)
+    new_state = @current_node.data.do(move)
+    new_node = Node.new(new_state)
+    @current_node.add_child(new_node)
+    return new_node 
+  end
+
+  def undo
+    parent_node = @current_node.parent_node
+    if parent_node
+      @current_node = parent_node
+    end
+  end
+
+=begin
+
+ State methods
+
+=end
+  def get_previous_pos(piece)
+    prev_state = @current_node.parent_node.data
+    return nil unless prev_state
+    prev_state.get_pos(piece)
+  end
+
+  def get_pos(piece)
+    @current_node.data.get_pos(piece)
+  end
+
+  def get_piece_at(pos)
+    @current_node.data.get_piece_at(pos)
+  end
+
+  def get_moved_status(piece)
+    @current_node.data.get_moved_status(piece)
+  end
+
+  def get_last_moved
+    @current_node.data.get_last_moved
+  end
+
+  def get_moves(args = {})
+    @current_node.data.get_moves(args)
+  end
+
+  def get_pieces(args = {})
+    @current_node.data.get_pieces(args)
+  end
+
+  def in_check?(args)
+    @current_node.data.in_check?(args)
+  end
+
+  def checkmate?(team)
+    #@current_node.data.checkmate?(team)
+    state = @current_node.data
+    return false unless in_check?(team: team)
+    
+    #get team's king and check if king can escape on its own
+    king = state.get_pieces(type: "King", team: team)[0]
+    king_cant_escape = king.possible_moves.all? do |mv|
+      next_state = self.do(mv).data
+      check = next_state.in_check?(king: king)
+    end
+
+    return false unless king_cant_escape
+
+    #get important spaces (spaces between king and attackers, and attacker positions)
+    king_pos = state.get_pos(king)
+    enemy_team = ["white", "black"].find { |t| t != king.team }
+    attackers = state.get_pieces(team: enemy_team).filter do |atk|
+      atk.possible_moves.any? do |mv|
+        mv.include?(king_pos)
+      end
+    end
+
+    important_spaces = attackers.reduce([]) do |spaces, atk|
+      atk_pos = state.get_pos(atk)
+      spaces.concat(Movement.get_spaces_between(king_pos, atk_pos)).concat(atk_pos)
+    end
+
+    ally_pieces = get_pieces(team: team)
+
+    checkmate = ally_pieces.all? do |p|
+      p_moves = p.possible_moves 
+      p_moves.all? do |mv|
+        if important_spaces.include?(mv.destination(p))
+          next_state = self.do(mv).data
+          check = next_state.in_check?(king: king)
+        else
+          true
+        end
+      end
+    end
+
+    return checkmate
+  end
+
+end
+
+
+class State
+
+  def initialize(args)
+    @pieces = args.fetch(:pieces_hash, nil) || set_pieces(args.fetch(:pieces), true)
+    @positions = get_positions #inverse of positions and pieces
+    @check = args.fetch(:check, nil) || { "white" => nil, "black" => nil }
+    @checkmate = args.fetch(:checkmate, nil) || { "white" => nil, "black" => nil }
+    @last_move = args.fetch(:last, nil)
+
+    set_moves 
+    $game_debug += "finished set_moves.\n full @pieces hash is:\n#{@pieces}\n"
+  end
+
+  def get_positions
+    @pieces.keys.reduce({}) do |hash, piece|
+      hash.merge({ @pieces[piece][:pos] => piece })
+    end
+  end
+
+  def last_move
+    @last_move
+  end
+
+  def last_move=(last_move)
+    @last_move = last_move
+  end
+
+  def set_moves
+    $game_debug += "called set_moves:\n"
+    $game_debug += "@pieces is:\n#{@pieces}\n"
+    @pieces.each_key do |piece|
+      $game_debug += "piece: #{piece}\n"
+      #pawn requires knowing previous position of neighboring pawns for en_passant
+      #either need to find a way to get previous state from StateTree, or thinking of
+      #another way to calculate it
+      @pieces[piece].merge!({ :moves => piece.generate_possible_moves(self) }) 
+    end
+  end
+
+  def set_pieces(pieces, initial = false)
+    pieces_hash = {}
+    pieces.each do |piece|
+      pieces_hash[piece] = { :pos => initial ? piece.starting_pos : piece.current_pos,
+                             :moved => initial ? false : piece.moved }
+    end
+
+    return pieces_hash
+  end
+
+  public
+  def do(move)
+    pieces_hash = {}
+    move.each do |piece, current_pos, dest_pos|
+      pieces_hash[piece] = { :pos => dest_pos,
+                             :moved => true }
+    end
+
+    pieces_hash = @pieces.merge(pieces_hash)
+   
+    check = { "white" => nil,
+              "black" => nil }
+    
+    last_move = move
+
+    return State.new(pieces_hash: pieces_hash,
+                     check: check,
+                     last_move: move)
+  end
+
+  def get_pos(piece)
+    if @pieces[piece]
+      @pieces[piece][:pos]
+    else
+      nil
+    end
+  end
+
+  def get_piece_at(pos)
+    @positions[pos]
+  end
+
+  def get_last_moved
+    if @last_move
+      @last_move.get_piece
+    else
+      nil
+    end
+  end
+
+  def get_moved_status(piece)
+    @pieces[piece][:moved]
+  end
+
+  def get_moves(args = {})
+    pieces = get_pieces(args)
+
+    moves = pieces.map do |piece|
+      @pieces[piece][:moves]
+    end
+
+    return moves
+  end
+
+  def get_pieces(args = {})
+    pieces = []
+
+    @pieces.keys.each do |piece|
+      match_all = args.keys.all? do |key|
+        if key == :type
+          clz = Kernel.const_get(args[key])
+          piece.kind_of?(clz)
+        else
+          inst_var = "@#{key}".to_sym
+          piece.instance_variable_get(inst_var) == args[key]
+        end
+      end
+      if match_all
+        pieces << piece
+      end
+    end 
+
+    return nil if pieces.empty?
+    return pieces
+  end
+
+  def in_check?(args)
+    team = args.fetch(:team, nil)
+    king = args.fetch(:king, nil)|| get_pieces(type: "King", team: team)[0]
+    team ||= king.team
+
+    unless @check[team].nil?
+      return @check[team]
+    end
+
+    king_pos = get_pos(king)
+    enemy_pieces = get_pieces.filter { |p| p.team != team }
+    attackers = enemy_pieces.filter do |ep|
+      ep_moves = get_moves(id: ep.id).flatten
+      ep_moves.any? do |move|
+        move.include?(king_pos)
+      end
+    end
+
+    if attackers.empty?
+      @check[team] = false
+      return nil
+    else
+      @check[team] = true
+      return attackers
+    end
+  end
+
+  def checkmate?(team)
+    attackers = in_check?(team: team)
+    return false unless attackers
+    
+    unless @checkmate[team].nil?
+      return @checkmate[team]
+    end
+
+    #get team's king and check if king can escape on its own
+    king = get_pieces(type: "King", team: team)[0]
+    king_cant_escape = king.possible_moves.all? do |mv|
+      next_state = self.do(mv)
+      check = next_state.in_check?(king: king)
+    end
+
+    return false unless king_cant_escape
+
+    #get important spaces (spaces between king and attackers, and attacker positions)
+    king_pos = get_pos(king)
+    important_spaces = attackers.reduce([]) do |spaces, atk|
+      atk_pos = get_pos(atk)
+      spaces.concat(Movement.get_spaces_between(king_pos, atk_pos)).concat(atk_pos)
+    end
+
+    ally_pieces = get_pieces(team: team)
+
+    checkmate = ally_pieces.all? do |p|
+      p_moves = p.possible_moves 
+      p_moves.all? do |mv|
+        if important_spaces.include?(mv.destination(p))
+          next_state = self.do(mv)
+          check = next_state.in_check?(king: king)
+        else
+          true
+        end
+      end
+    end
+
+    @checkmate[team] = checkmate
+    return checkmate
+  end
+
+end
+
+
+class Observer
+
+  def initialize(args)
+    @to_do = args.fetch(:to_do)
+  end
+
+  def update(args)
+    @to_do.call(args)
+  end
+
+end
