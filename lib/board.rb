@@ -270,23 +270,20 @@ class Board
   end
 
   def do(move)
-    move.each do |piece, pos_arr|
-      prev_pos = pos_arr[0]
-      pos = pos_arr[1]
-      place(piece, pos) if pos
+    move.each do |piece, current_pos, dest_pos|
+      place(piece, dest_pos) if dest_pos
       piece.set_moved(true)
-      remove_at(prev_pos)
+      remove_at(current_pos)
     end
     update_gamestate
   end
 
   def undo(move)
-    move.each do |piece, pos_arr|
-      prev_pos = pos_arr[0]
-      current_pos = pos_arr[1]
+    move.each do |piece, prev_pos, current_pos|
       place(piece, prev_pos)
       remove_at(current_pos) if current_pos
     end
+    revert_to_previous_state(1)
   end
 
   def in_check?(args)

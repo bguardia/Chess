@@ -114,7 +114,11 @@ class Game
        $game_debug += "player_turn loop: @msg_arr[0] is: #{@msg_arr[0]}\n"
        input = player.get_input({})
        move = to_move(input)
-       $game_debug += "move is #{move}"
+       $game_debug += "move is:\n "
+       move.each do |piece, current_pos, dest_pos|
+         $game_debug += "-> #{piece.class} (#{piece.id}), #{current_pos}, #{dest_pos}\n"
+       end
+
        valid_move = valid?(move)
        @messenger.update
        break if valid_move
@@ -144,14 +148,14 @@ class Game
  end
  
  def valid?(move)
-   piece = move.keys.first 
+   piece = move.get_piece
    
    unless piece
      @msg_arr << "Not a valid move"
      return false
    end
 
-   pos = move[piece][1]
+   pos = move.destination(piece)
    removed = @board.get_piece_at(pos)
 
    unless piece.team == @current_player.team
@@ -223,6 +227,7 @@ class Game
  def self.load(saved_game); end
 end
 
+=begin
 class Move
   attr_reader :piece, :prev_pos, :pos, :removed, :castle, :promotion, :notation, :legible
   
@@ -303,7 +308,7 @@ class Move
     end
   end
 end
-
+=end
 module ChessNotation
 
    @@rank = [8, 7, 6, 5, 4, 3, 2, 1]
@@ -349,7 +354,7 @@ module ChessNotation
      pieces = []
      current_pos_arr = []
      dest_pos_arr = []
-
+=begin
      move.each_key do |piece|
        current_pos = move[piece][0]
        #if this is the second piece and its current_pos
@@ -378,12 +383,34 @@ module ChessNotation
          end
        end
      end
+=end
+    pieces = []
+    prev_pos_arr = []
+    dest_pos_arr = []
+    move.each do |piece, prev_pos, current_pos|
+      pieces << piece
+      prev_pos_arr << prev_pos
+      dest_pos_arr << current_pos
+    end
 
+    en_passant = ""
+    capture = ""
+    promotion = ""
+    move_type = move.get_attr(:type)
+    if move_type == :en_passant
+      en_passant = "e.p."
+      capture = "x"
+    elsif move_type == :castle
+      return castle_notation(pieces.first, prev_pos_arr.first, dest_pos_arr.first)
+    elsif move_type == :promotion
+      promotion = "=#{@@pieces[pieces.last]}"
+    end
+     
      if pieces.length > 1 && dest_pos_arr.last == nil 
          capture = "x"
      end
 
-     detail = clarify_notation(pieces.first, dest_pos, board)
+     detail = clarify_notation(pieces.first, dest_pos_arr.first, board)
 
      #check for check/checkmate 
      check = ""
@@ -395,6 +422,7 @@ module ChessNotation
        end
      end
 
+     dest_pos = dest_pos_arr.first
      space_str = to_file(dest_pos) + to_rank(dest_pos).to_s
      to_piece_char(pieces.first) + detail + capture + space_str + promotion + en_passant + check 
 

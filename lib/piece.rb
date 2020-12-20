@@ -138,8 +138,7 @@ class Piece
   public
   def moved_last_turn?(board)
     last_moved = board.return_last_moved
-    $pieces_debug += "last_moved: #{last_moved} (id: #{last_moved.id}\n"
-    $pieces_debug += "self.id: #{self.id}\n"
+    #$pieces_debug += "last_moved: #{last_moved} (id: #{last_moved.id}\n"
     self == board.return_last_moved 
   end
 
@@ -147,8 +146,14 @@ class Piece
   #Special moves are any moves that require a greater context, such as en passant or castling,
   #therefore requiring board to be passed as an argument
   def possible_moves(board)
-    moves = normal_moves(board).map { |pos| Movement.create_move(self, pos)  }  
+    moves = normal_moves(board).map { |pos| Movement.create_move([[self, self.current_pos, pos]], :normal)  }  
     moves.concat(special_moves(board))
+
+    $pieces_debug += "#{self.class} (#{self.id}).possible_moves(board):\n"
+    moves.each do |mv|
+      $pieces_debug += mv.to_s
+    end
+    return moves
   end
 
   def normal_moves(board); end
@@ -159,7 +164,7 @@ class Piece
   def can_move_to?(pos, board)
     moves = possible_moves(board)
     moves.any? do |mv|
-      mv[self][1] == pos
+      mv.destination(self) == pos
     end
   end
 
@@ -277,12 +282,12 @@ class King < Piece
 
         rooks.each do |rook|
           if rook.current_pos[1] > self.current_pos[1]
-            move = Movement.create_move(self, [self.current_pos[0], self.current_pos[1] + 2],
-                                        rook, [rook.current_pos[0], self.current_pos[1] + 1]) #rook one space right of king's current_pos
+            move = Movement.create_move([[self, self.current_pos, [self.current_pos[0], self.current_pos[1] + 2]],
+                                         [rook, rook.current_pos, [rook.current_pos[0], self.current_pos[1] + 1]]], :castle)
 
           else
-            move = Movement.create_move(self, [self.current_pos[0], self.current_pos[1] - 2],
-                                        rook, [rook.current_pos[0], self.current_pos[1] - 1] ) #rook one space left of king's current_pos
+            move = Movement.create_move([[self, self.current_pos, [self.current_pos[0], self.current_pos[1] - 2]],
+                                         [rook, rook.current_pos, [rook.current_pos[0], self.current_pos[1] - 1]]], :castle) 
           end
           moves << move
         end
@@ -291,7 +296,7 @@ class King < Piece
         moves.select! do |move|
           #Get spaces_on(board) between moves
           #Check if any space between moves can be reached by an enemy piece
-          !Movement.get_spaces_between(self.current_pos, move[self][1]).any? do |space|
+          !Movement.get_spaces_between(self.current_pos, move.destination(self)).any? do |space|
             Movement.who_can_reach?(space, board).any? do |piece|
               piece.team != self.team
             end
@@ -368,7 +373,8 @@ class Pawn < Piece
         if something && something.kind_of?(Pawn)
           prev_pos = board.get_previous_pos(something)
           if something.moved_last_turn?(board) && prev_pos == something.starting_pos
-            special_moves_arr << Movement.create_move(self, diag_moves[index], something)
+            special_moves_arr << Movement.create_move([[self, self.current_pos, diag_moves[index]],
+                                                       [something, something.current_pos, nil]], :en_passant)
           end
         end
       end
@@ -381,6 +387,10 @@ class Pawn < Piece
     
     end
 =end
+    $pieces_debug += "\nPawn (id: #{self.id}) special_moves_arr: \n"
+    special_moves_arr.each do |move|
+      $pieces_debug += move.to_s 
+    end
     return special_moves_arr
   end
 end

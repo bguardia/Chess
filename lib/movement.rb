@@ -1,5 +1,8 @@
 require './lib/chess.rb'
 
+
+$movement_debug = ""
+
 module Movement
 
   #create a new MovementArray with the given board and piece 
@@ -18,6 +21,7 @@ module Movement
       @origin = board.get_coords(piece)
       @moves = []
       @modifiable_moves = [[0,0]]
+      $movement_debug += "MovementArray.new called. @piece: #{@piece.class}, @origin: #{@origin}\n"
     end
 
     private
@@ -183,21 +187,29 @@ module Movement
       add_moves
       moves = @moves.map { |move| [move[0] + @origin[0], move[1] + @origin[1]] }
       
+      $movement_debug += "Spaces called. Calculated positions are: #{moves}\n"
+
       on_board = moves.filter { |move| @board.cell_exists?(move) }
 
+      $movement_debug += "Positions off board have been filtered. Now: #{on_board}\n"
+
       unless @piece.kind_of?(Knight)
+        $movement_debug += "Piece is not a knight. Filtering blocked moves...\n"
         on_board.filter! do |move|
           !Movement.blocked?(@piece, move, @board)
         end
+        $movement_debug += "Blocked moves have been filtered. Remaining moves: #{on_board}\n"
       end
 
       #pawns cannot capture pieces unless moving diagonally,
       #so set :pawn_cap to true for diagonal movement
       if @piece.kind_of?(Pawn)
         unless args.fetch(:pawn_cap, false)
+          $movement_debug += "Piece is a pawn and :pawn_cap is false. Filtering positions with pieces...\n"
           on_board.filter! do |move|
             @board.get_piece_at(move).nil?
           end
+          $movement_debug += "Positions have been filtered. Remaining moves: #{on_board}\n"
         end
       end
 
@@ -319,7 +331,6 @@ module Movement
     #check possible moves of other ally pieces
     pieces = board.get_pieces(team: king.team)
     checkmate = pieces.all? do |piece|
-      $game_debug += "For #{piece.class} (id: #{piece.id})\n"
       piece.possible_moves(board).all? do |mv|
         #if move can block or take attacking piece
         #simulate move and check state
@@ -340,26 +351,31 @@ module Movement
   end
 
   def self.return_move(piece_pos, dest_pos, board)
+    $game_debug += "called Movement.return_move(#{piece_pos}, #{dest_pos}, board)\n"
     piece = board.get_piece_at(piece_pos)
     moves = piece.possible_moves(board)
+
+    $game_debug += "Piece is: #{piece.class} (#{piece.id})\n"
+    $game_debug += "Moves are:\n"
+    moves.each do |mv|
+      $game_debug += mv.to_s
+    end
 
     #check for any moves matching given destination
     #and return first match
     moves.each do |mv|
-      if mv[piece][1] == dest_pos
+      $game_debug += mv.to_s
+      if mv.destination(piece) == dest_pos
+        $game_debug += "Move matched to #{dest_pos}\n"
         return mv
       end
     end
     #return nil if none match
-    return { nil => nil }
+    return EmptyMove.new #empty move 
   end
 
-  def self.create_move(piece1, dest_pos1, piece2 = nil, dest_pos2 = nil)
-    move =  { piece1 => [piece1.current_pos, dest_pos1] }
-      if piece2
-        move = Movement.add_to_move(move, piece2, dest_pos2)
-      end
-
+  def self.create_move(move_arr, type)
+    move = Move.new(move: move_arr, type: type) 
     return move
   end
 
@@ -378,7 +394,101 @@ module Movement
   end
 end
 
+class Move
 
+  def initialize(args = {})
+    @instructions = prepare_arr(args.fetch(:move, nil)) # [ [piece, current_pos, next_pos] ] 
+    @turn = args.fetch(:team, nil) || get_team #:white, :black
+    #additional information about a move
+    @attributes = { :type => args.fetch(:type, nil),        #:normal, :en_passant, :castle, :promotion   
+                    :blocked? => args.fetch(:blocked?, nil),  
+                    :capture => args.fetch(:capture?, nil),
+                    :check? => false,
+                    :checkmate => false,
+                    :notation => nil     }
+  end
+
+  def get_team
+    if @instructions
+      @instructions.first[0].team
+    else
+      nil
+    end
+  end
+
+  def prepare_arr(arr)
+    return nil if arr.nil?
+
+    if arr.flatten == arr
+      return [arr]
+    else
+      return arr
+    end
+  end
+
+  def set_attr(attr, val)
+    return nil unless @attributes.has_key?(attr)
+    @attributes[attr] = val
+  end
+
+  def get_attr(attr)
+    @attributes[attr]
+  end
+
+  def include?(pos)
+    @instructions.each do |move_arr|
+      move_arr[1..2].each do |move_pos|
+        return true if move_pos == pos
+      end
+    end
+
+    return false
+  end
+
+  def each (&block)
+    @instructions.each do |move|
+      block.call(move)
+    end
+  end
+
+  def get_piece
+    if @instructions
+      @instructions.first.first
+    else
+      nil
+    end
+  end
+
+  def destination(piece)
+    @instructions.each do |move_arr|
+      if move_arr[0] == piece
+        return move_arr[2]
+      end
+    end
+
+    return nil
+  end
+
+  def to_s
+    str = "Move:\n"
+    each do |p, cur_pos, dest_pos|
+      str += "-> #{p.class} (#{p.id}), #{cur_pos}, #{dest_pos}\n"
+    end
+    return str
+  end
+end
+
+class EmptyMove < Move
+  
+  def each (&block); end
+  def destination(piece); end
+  def include?(pos); end
+  def set_attr(attr, val); end
+  def get_attr(attr); end
+
+end
+
+=begin
 class Move
   attr_reader :piece, :prev_pos, :pos, :removed, :castle, :promotion, :notation
   
@@ -436,4 +546,4 @@ class Move
   end
 end
 
-
+=end
