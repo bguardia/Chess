@@ -385,19 +385,20 @@ class Pawn < Piece
     special_moves_arr = []
     
     #En passant
-    #If an enemy piece moves to a square horizontally adjacent to a pawn
-    #the pawn can capture it on the next turn
+    #This move has three conditions:
+    #1. Pawn must be on the third rank forward from its starting position.
+    #2. Enemy pawn must move from its starting position two spaces (adjacent to pawn).
+    #3. Pawn can only do en passant on the immediately following turn.
     current_pos = state.get_pos(self)
     diag_moves = moves(self, state).forward(1).and.horizontally(1).spaces
-    if (current_pos[0] - self.starting_pos[0]).abs == 3
-      adj_moves = moves(self, state).horizontally(1).spaces(pawn_cap: true)
-
+    if (current_pos[0] - self.starting_pos[0]).abs == 3 #1
+      adj_moves = moves(self, state).horizontally(1).spaces(pawn_cap: true) #2..
       adj_moves.each_index do |index|
         something = state.get_piece_at(adj_moves[index])
         if something && something.kind_of?(Pawn)
           prev_pos = state.get_previous_pos(something)
           moved_last_turn = state.get_last_moved == something
-          if moved_last_turn && prev_pos == something.starting_pos
+          if moved_last_turn && prev_pos == something.starting_pos #..2, 3
             special_moves_arr << Movement.create_move([[self, self.current_pos, diag_moves[index]],
                                                        [something, something.current_pos, nil]], :en_passant)
           end
@@ -412,10 +413,6 @@ class Pawn < Piece
     
     end
 =end
-    $pieces_debug += "\nPawn (id: #{self.id}) special_moves_arr: \n"
-    special_moves_arr.each do |move|
-      $pieces_debug += move.to_s 
-    end
     return special_moves_arr
   end
 end

@@ -397,10 +397,9 @@ class State
     @positions = get_positions #inverse of positions and pieces
     @check = args.fetch(:check, nil) || { "white" => nil, "black" => nil }
     @checkmate = args.fetch(:checkmate, nil) || { "white" => nil, "black" => nil }
-    @last_move = args.fetch(:last, nil)
+    @last_move = args.fetch(:last_move, nil)
 
     set_moves 
-    $game_debug += "finished set_moves.\n full @pieces hash is:\n#{@pieces}\n"
   end
 
   def get_positions
@@ -422,9 +421,6 @@ class State
     $game_debug += "@pieces is:\n#{@pieces}\n"
     @pieces.each_key do |piece|
       $game_debug += "piece: #{piece}\n"
-      #pawn requires knowing previous position of neighboring pawns for en_passant
-      #either need to find a way to get previous state from StateTree, or thinking of
-      #another way to calculate it
       exists = @pieces[piece][:pos]
       @pieces[piece].merge!({ :moves => exists ? piece.generate_possible_moves(self) : nil }) 
     end
@@ -433,7 +429,8 @@ class State
   def set_pieces(pieces, initial = false)
     pieces_hash = {}
     pieces.each do |piece|
-      pieces_hash[piece] = { :pos => initial ? piece.starting_pos : piece.current_pos,
+      pieces_hash[piece] = { :prev_pos => piece.starting_pos,
+                             :pos => initial ? piece.starting_pos : piece.current_pos,
                              :moved => initial ? false : piece.moved }
     end
 
@@ -442,11 +439,12 @@ class State
 
   public
   def do(move)
-    pieces_hash = @pieces.merge({})
+    pieces_hash = @pieces.merge({}) #make a copy
 
     move.each do |piece, current_pos, dest_pos|
       if dest_pos
-        pieces_hash[piece] = { :pos => dest_pos,
+        pieces_hash[piece] = { :prev_pos => current_pos,
+                               :pos => dest_pos,
                                :moved => true }
       else
         pieces_hash.delete(piece)
@@ -473,6 +471,12 @@ class State
 
   def get_piece_at(pos)
     @positions[pos]
+  end
+
+  def get_previous_pos(piece)
+    if @pieces[piece]
+      @pieces[piece][:prev_pos]
+    end
   end
 
   def get_last_moved
