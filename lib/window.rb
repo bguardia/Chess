@@ -142,7 +142,16 @@ module Highlighting
     win.addstr(chr)
     win.attroff(Curses.color_pair(color_pair))
   end
-  
+
+  def c_temp_highlight(win, chr, pos, colors)
+    color_pair = c_color_pairs.fetch(colors, nil) || new_c_pair(colors)
+    
+    win.attron(Curses.color_pair(color_pair))
+    win.setpos(pos[0], pos[1])
+    win.addstr(chr)
+    win.attroff(Curses.color_pair(color_pair))
+  end  
+
   #Pass a str_arr and curses window to input the string character by character
   #into the curses window
   def curses_colorize_str(win, str_arr)
@@ -1017,17 +1026,46 @@ class CursorMap < Map
   def on_enter
     current_pos = [@pos_y, @pos_x] 
     #check if that piece can be selected?
-    if @stored_input
+    if @stored_input == current_pos
+      on_backspace
+    elsif @stored_input
       @input_to_return = [@stored_input.dup, current_pos]
       @stored_input = nil
     else
       @stored_input = current_pos
+      something = @arr[current_pos[0]][current_pos[1]]
+      if something
+        something.possible_moves.map do |mv|
+          pos = mv.destination(something)
+          str_pos = arr_to_str_pos(pos)
+          chr = @str_arr[str_pos[0]][str_pos[1]]
+          c_temp_highlight(@win, chr, str_pos, [:black, :yellow])
+        end
+      str_pos = arr_to_str_pos(current_pos)
+      chr = @str_arr[str_pos[0]][str_pos[1]]
+      c_temp_highlight(@win, chr, str_pos, [:black, :yellow])
       #get highlights from board and update map display with highlights
+      end 
     end 
   end
 
   def on_backspace
-    @stored_input = nil
+    if @stored_input
+      something = @arr[@stored_input[0]][@stored_input[1]]
+      if something
+        something.possible_moves.map do |mv|
+          pos = mv.destination(something)
+          str_pos = arr_to_str_pos(pos)
+          chr = @str_arr[str_pos[0]][str_pos[1]]
+          c_highlight(@win, chr, str_pos)
+        end
+      
+      str_pos = arr_to_str_pos(@stored_input)
+      chr = @str_arr[str_pos[0]][str_pos[1]]
+      c_highlight(@win, chr, str_pos)
+      end
+      @stored_input = nil
+    end
     #remove any highlights from board
   end
 
@@ -1053,7 +1091,7 @@ class CursorMap < Map
 
   def before_get_input
     update_cursor_pos
-    @win.redraw
+    update
     @input_to_return = nil
     @stored_input = nil
     Curses.noecho
@@ -1255,7 +1293,8 @@ def get_board_map(board)
                             content: board_str, 
                             key: "X", 
                             bg_map: bg_map, 
-                            fg_map: fg_map)
+                            fg_map: fg_map,
+                            empty_chr: "_")
 
 end
 
