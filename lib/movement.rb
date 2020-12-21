@@ -254,7 +254,7 @@ module Movement
   def self.who_can_reach?(pos, board, args = {})
     pieces = board.get_pieces(args)
     pieces.filter! do |piece|
-      piece.can_move_to?(pos, board)
+      piece.can_reach?(pos)
     end
 
     return pieces
