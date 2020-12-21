@@ -299,7 +299,7 @@ class StateTree
   def undo
     parent_node = @current_node.parent_node
     if parent_node
-      @current_node = parent_node
+      set_current_node(parent_node)
     end
   end
 
@@ -417,10 +417,7 @@ class State
   end
 
   def set_moves
-    $game_debug += "called set_moves:\n"
-    $game_debug += "@pieces is:\n#{@pieces}\n"
     @pieces.each_key do |piece|
-      $game_debug += "piece: #{piece}\n"
       exists = @pieces[piece][:pos]
       @pieces[piece].merge!({ :moves => exists ? piece.generate_possible_moves(self) : nil }) 
     end

@@ -126,27 +126,14 @@ class Game
    move = nil
 
    loop do
-       $game_debug += "player_turn loop: @msg_arr[0] is: #{@msg_arr[0]}\n"
        input = player.get_input({})
        move = to_move(input)
-       $game_debug += "move is:\n "
-       move.each do |piece, current_pos, dest_pos|
-         $game_debug += "-> #{piece.class} (#{piece.id}), #{current_pos}, #{dest_pos}\n"
-       end
-
        valid_move = valid?(move)
        @messenger.update
        break if valid_move
    end
 
    @gamestate.do!(move)
-=begin
-   if input.kind_of?(String)
-     notation = input
-   else
-     notation = ChessNotation.move_to_notation(move, board)
-   end
-=end
    update_move_history(move)
  end
 
@@ -198,6 +185,7 @@ class Game
    @gamestate.undo
    if check_before_move && check_after_move
      @msg_arr << "King is still in check."
+     return false
    elsif check_after_move
      @msg_arr << "Move puts king in check."
      return false

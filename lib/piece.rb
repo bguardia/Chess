@@ -166,20 +166,18 @@ class Piece
   def generate_possible_moves(state)
     moves = normal_moves(state).map do |pos| 
       move_arr = [[self, self.current_pos, pos]]
-      if other = state.get_piece_at(pos)
+      other = state.get_piece_at(pos)
+      if other && other.team != self.team
         move_arr << [other, pos, nil]
+        Movement.create_move(move_arr, :normal)
+      elsif other.nil?
+        Movement.create_move(move_arr, :normal)   
       end
-      Movement.create_move(move_arr, :normal)   
     end
 
     moves.concat(special_moves(state))
 
-    $pieces_debug += "#{self.class} (#{self.id}).possible_moves(state):\n"
-    moves.each do |mv|
-      $pieces_debug += mv.to_s
-    end
-
-    return moves
+    return moves.compact
   end
 
   def possible_moves
