@@ -425,7 +425,8 @@ class State
       #pawn requires knowing previous position of neighboring pawns for en_passant
       #either need to find a way to get previous state from StateTree, or thinking of
       #another way to calculate it
-      @pieces[piece].merge!({ :moves => piece.generate_possible_moves(self) }) 
+      exists = @pieces[piece][:pos]
+      @pieces[piece].merge!({ :moves => exists ? piece.generate_possible_moves(self) : nil }) 
     end
   end
 
@@ -441,14 +442,17 @@ class State
 
   public
   def do(move)
-    pieces_hash = {}
-    move.each do |piece, current_pos, dest_pos|
-      pieces_hash[piece] = { :pos => dest_pos,
-                             :moved => true }
-    end
+    pieces_hash = @pieces.merge({})
 
-    pieces_hash = @pieces.merge(pieces_hash)
-   
+    move.each do |piece, current_pos, dest_pos|
+      if dest_pos
+        pieces_hash[piece] = { :pos => dest_pos,
+                               :moved => true }
+      else
+        pieces_hash.delete(piece)
+      end
+    end
+    
     check = { "white" => nil,
               "black" => nil }
     
@@ -480,12 +484,14 @@ class State
   end
 
   def get_moved_status(piece)
-    @pieces[piece][:moved]
+    if @pieces[piece]
+      @pieces[piece][:moved]
+    end
   end
 
   def get_moves(args = {})
     pieces = get_pieces(args)
-
+   
     moves = pieces.map do |piece|
       @pieces[piece][:moves]
     end
@@ -511,7 +517,6 @@ class State
       end
     end 
 
-    return nil if pieces.empty?
     return pieces
   end
 

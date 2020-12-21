@@ -164,7 +164,14 @@ class Piece
   #Special moves are any moves that require a greater context, such as en passant or castling,
   #therefore requiring board to be passed as an argument
   def generate_possible_moves(state)
-    moves = normal_moves(state).map { |pos| Movement.create_move([[self, self.current_pos, pos]], :normal)  }  
+    moves = normal_moves(state).map do |pos| 
+      move_arr = [[self, self.current_pos, pos]]
+      if other = state.get_piece_at(pos)
+        move_arr << [other, pos, nil]
+      end
+      Movement.create_move(move_arr, :normal)   
+    end
+
     moves.concat(special_moves(state))
 
     $pieces_debug += "#{self.class} (#{self.id}).possible_moves(state):\n"
