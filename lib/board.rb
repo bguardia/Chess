@@ -277,7 +277,7 @@ class StateTree
       state = node.data
       state.last_move == move
     end
-    
+
     if next_state
       next_state
     else
@@ -340,6 +340,10 @@ class StateTree
 
   def in_check?(args)
     @current_node.data.in_check?(args)
+  end
+
+  def get_current_state
+    @current_node.data
   end
 
   def checkmate?(team)
@@ -436,10 +440,21 @@ class State
 
   public
   def do(move)
+    $game_debug += "Called State.do\n"
+
     pieces_hash = @pieces.merge({}) #make a copy
 
+    $game_debug += "current state is: \n"
+    pieces_hash.each_pair do |p, val|
+      prev = val[:prev_pos]
+      pos = val[:pos]
+      $game_debug += "#{p.class} (#{p.id}) => :prev_pos #{prev}, :pos #{pos}\n"
+    end
+
     move.each do |piece, current_pos, dest_pos|
+      $game_debug += "move: [#{piece.class} (#{piece.id}), #{current_pos}, #{dest_pos}]\n"
       if dest_pos
+        $game_debug += "-> has dest_pos \n"
         pieces_hash[piece] = { :prev_pos => current_pos,
                                :pos => dest_pos,
                                :moved => true }
@@ -448,6 +463,13 @@ class State
       end
     end
     
+    $game_debug += "state now is: \n"
+    pieces_hash.each_pair do |p, val|
+      prev = val[:prev_pos]
+      pos = val[:pos]
+      $game_debug += "#{p.class} (#{p.id}) => :prev_pos #{prev}, :pos #{pos}\n"
+    end
+
     check = { "white" => nil,
               "black" => nil }
     

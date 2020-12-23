@@ -1034,7 +1034,7 @@ class CursorMap < Map
     else
       @stored_input = current_pos
       something = @arr[current_pos[0]][current_pos[1]]
-      if something
+      if something && something.possible_moves
         something.possible_moves.map do |mv|
           pos = mv.destination(something)
           str_pos = arr_to_str_pos(pos)
@@ -1052,7 +1052,7 @@ class CursorMap < Map
   def on_backspace
     if @stored_input
       something = @arr[@stored_input[0]][@stored_input[1]]
-      if something
+      if something && something.possible_moves
         something.possible_moves.map do |mv|
           pos = mv.destination(something)
           str_pos = arr_to_str_pos(pos)

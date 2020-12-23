@@ -11,6 +11,143 @@ module Movement
     MovementArray.new(piece, board)
   end
 
+  def pawn_moves(pawn, state)
+    #Forward movement
+    if pawn.moved? == false
+      positions = MovementArray.new(pawn, state).forward(1..2).spaces
+    else
+      positions = MovementArray.new(pawn, state).forward(1).spaces
+    end
+
+    #Diagonal captures
+    diag_forward = MovementArray.new(pawn, state).forward(1).and.horizontally(1).spaces(pawn_cap: true)
+    diag_forward.each do |dest_pos|
+      dest_piece = state.get_piece_at(dest_pos)
+      if dest_piece && dest_piece.team != pawn.team
+        positions << dest_pos
+      end
+    end
+
+    moves = create_moves(positions, pawn, state)
+    moves.each do |mv|
+      last_rank = pawn.team == "white" ? 0 : 7 
+      if mv.destination(pawn)[0] == last_rank
+        mv.set_attr(:type, :promotion)
+      end
+    end
+
+    moves << en_passant(pawn, state)
+    moves.compact
+  end
+
+  def bishop_moves(bishop, state)
+     positions = MovementArray.new(bishop, state).diagonally(1..7).spaces
+     create_moves(positions, bishop, state)
+  end
+
+  def queen_moves(queen, state)
+    positions = MovementArray.new(queen, state).diagonally(1..7).or.horizontally(1..7).or.vertically(1..7).spaces
+    create_moves(positions, queen, state)
+  end
+
+  def king_moves(king, state)
+    positions = MovementArray.new(king, state).diagonally(1).or.horizontally(1).or.vertically(1).spaces
+    moves = create_moves(positions, king, state)
+    moves.concat(castling(king, state))
+  end
+
+  def knight_moves(knight, state)
+    positions = MovementArray.new(knight, state).vertically(2).and.horizontally(1).or.horizontally(2).and.vertically(1).spaces
+    create_moves(positions, knight, state)
+  end
+
+  def rook_moves(rook, state)
+    positions = MovementArray.new(rook, state).vertically(1..7).or.horizontally(1..7).spaces
+    create_moves(positions, rook, state)
+  end
+
+  #Special moves
+  def en_passant(pawn, state)
+    current_rank = (pawn.current_pos[0] - pawn.starting_pos[0]).abs + 2
+    if current_rank == 5
+      en_passant = nil
+      diag_forward = MovementArray.new(pawn, state).forward(1).and.horizontally(1).spaces
+      adj_spaces = MovementArray.new(pawn, state).horizontally(1).spaces(pawn_cap: true)
+
+      adj_spaces.each_index do |i|
+        adj_pos = adj_spaces[i]
+        adj_piece = state.get_piece_at(adj_pos)
+        if adj_piece && adj_piece.team != pawn.team && adj_piece.kind_of?(Pawn)
+          moved_last = state.get_last_moved == adj_piece
+          two_spaces_in_one_turn = state.get_previous_pos(adj_piece) == adj_piece.starting_pos
+
+          if moved_last && two_spaces_in_one_turn
+            en_passant = [[self, self.current_pos, diag_forward[i]],
+                          [adj_piece, adj_piece.current_pos, nil]]
+            break
+          end
+        end
+      end
+
+      if en_passant
+        return Move.new(move: en_passant, type: :en_passant)
+      end     
+    end
+
+    return nil
+  end
+
+  def castling(king, state)
+    unless king.moved?
+      castles = []
+      rooks = state.get_pieces(type: "Rook", team: king.team, moved: false)
+      rooks.each do |rook|
+        spaces_between = Movement.get_spaces_between(king.current_pos, rook.current_pos)
+        blocked = spaces_between.map { |pos| state.get_piece_at(pos) }.compact.empty?
+        unless blocked
+          king_dest = [ rook.current_pos[0] < king.current_pos[0] ? 2 : 6, king.current_pos[1]]
+          rook_dest = [ rook.current_pos[0] < king.current_pos[0] ? 3 : 5, rook.current_pos[1]]
+          castles << Move.new(move: [[king, king.current_pos, king_dest],
+                                     [rook, rook.current_pos, rook_dest]],
+                              type: :castle)
+        end
+      end
+      return castles
+    end
+           
+    return []
+  end
+
+  def create_moves(moves, piece, state)
+    move_hash_arr = []
+    move_arr = []
+
+    moves.each do |dest_pos|
+      dest_piece = state.get_piece_at(dest_pos)
+      if dest_piece && dest_piece.team == piece.team
+        next
+      end
+
+      spaces_between = Movement.get_spaces_between(piece.current_pos, dest_pos)
+      blocked = spaces_between.any? do |space|
+        state.get_piece_at(space)
+      end
+      blocked = false if piece.kind_of?(Knight)
+
+      move = [[piece, piece.current_pos, dest_pos]]
+      move << ([dest_piece, dest_piece.current_pos, nil]) if dest_piece
+
+      move_hash_arr << { move: move,
+                         blocked: blocked }     
+      end
+
+    move_hash_arr.each do |mvh|
+      move_arr << Move.new(mvh)
+    end
+
+    return move_arr
+  end
+
   class MovementArray
    
     attr_reader :moves, :modifiable_moves, :origin 
@@ -406,12 +543,13 @@ class Move
     @instructions = prepare_arr(args.fetch(:move, nil)) # [ [piece, current_pos, next_pos] ] 
     @turn = args.fetch(:team, nil) || get_team #:white, :black
     #additional information about a move
-    @attributes = { :type => args.fetch(:type, nil),        #:normal, :en_passant, :castle, :promotion   
-                    :blocked? => args.fetch(:blocked?, nil),  
-                    :capture => args.fetch(:capture?, nil),
-                    :check? => false,
+    @attributes = args.fetch(:attr, nil) || { :type => args.fetch(:type, nil),        #:normal, :en_passant, :castle, :promotion   
+                    :blocked => args.fetch(:blocked, nil),  
+                    :capture => args.fetch(:capture, nil),
+                    :check => false,
                     :checkmate => false,
-                    :notation => nil     }
+                    :notation => nil,
+                    :promoted_to => nil    }
   end
 
   def get_team
@@ -420,6 +558,49 @@ class Move
     else
       nil
     end
+  end
+
+  public
+  def add(move_arr)
+    new_instruct = @instructions.dup
+    move_arr = prepare_arr(move_arr)
+    move_arr.each do |mv|
+      new_instruct << mv
+    end
+
+    @instructions = new_instruct
+=begin
+    Move.new(move: new_instruct,
+             team: @turn,
+             attr: @attributes.dup)
+=end  
+  end
+
+  def instructions
+    @instructions
+  end
+
+  def ==(other)
+    instructions == other.instructions
+  end
+
+  def set_promotion_piece(piece)
+    pawn_move = @instructions.first
+    pawn = pawn_move.first
+    pawn_dest = pawn_move.last
+
+    add([[ pawn, pawn_dest, nil ],
+                    [ piece, nil, pawn_dest ]])
+
+    set_attr(:promoted_to, piece)
+=begin
+    new_move.set_attr(:promoted_to, piece)
+    return new_move
+=end
+  end
+
+  def promoted_to
+    get_attr(:promoted_to)
   end
 
   def prepare_arr(arr)
@@ -493,63 +674,3 @@ class EmptyMove < Move
   def get_attr(attr); end
 
 end
-
-=begin
-class Move
-  attr_reader :piece, :prev_pos, :pos, :removed, :castle, :promotion, :notation
-  
-  def initialize(board, args)
-    @moves = []
-    @piece = args.fetch(:piece)
-    @prev_pos = args.fetch(:prev_pos)
-    @pos = args.fetch(:pos)
-    @removed = args.fetch(:removed, nil)
-    @castle = args.fetch(:castle, false)
-    @promotion = args.fetch(:promotion, false)
-    @notation = args.fetch(:notation, false) || ChessNotation.to_notation(@prev_pos, @pos, @board)
-  end
-
-  def get_from_notation(note, board)
-    ChessNotation.from_notation(note, board)
-  end
-
-  def get_notation(prev_pos, pos, board)
-    ChessNotation.get_notation(prev_pos, pos, board)
-  end
-
-  def get_from_array(pos_arr, board)
-    $game_debug += "called Move.get_from_array(#{pos_arr}, board)\n"
-    ChessNotation.translate_move(pos_arr[0], pos_arr[1], board)
-  end
-
-  def self.simulate(board, prev_pos, pos)
-    Move.new(board, [prev_pos, pos])
-  end
-
-  def set_removed(removed)
-    @removed = removed
-  end
-
-  def get_removed
-    @removed
-  end
-
-  def get_move
-    { piece: @piece,
-      pos: @new_pos } 
-  end
-
-  def reverse_move
-    { piece: @piece,
-      pos: @prev_pos }
-  end
-
-  def do(board)
-    board.move(@piece, @pos)
-    if @castle
-      board.move(@castle[:piece], @castle[:pos]) 
-    end
-  end
-end
-
-=end

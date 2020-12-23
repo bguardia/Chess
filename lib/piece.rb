@@ -150,7 +150,19 @@ class Piece
   end
 
   def self.update_pieces(state)
+=begin
     @@pieces.each do |piece|
+      pos = state.get_pos(piece)
+      moves = state.get_moves(id: piece.id).flatten
+      moved = state.get_moved_status(piece)
+      piece.set_pos(pos)
+      piece.set_moves(moves)
+      piece.set_moved(moved)
+    end
+=end
+    pieces = state.get_pieces
+
+    pieces.each do |piece|
       pos = state.get_pos(piece)
       moves = state.get_moves(id: piece.id).flatten
       moved = state.get_moved_status(piece)
@@ -164,28 +176,10 @@ class Piece
   #Special moves are any moves that require a greater context, such as en passant or castling,
   #therefore requiring board to be passed as an argument
   def generate_possible_moves(state)
-    moves = normal_moves(state).map do |pos| 
-      move_arr = [[self, self.current_pos, pos]]
-      other = state.get_piece_at(pos)
-      if other && other.team != self.team
-        move_arr << [other, pos, nil]
-        Movement.create_move(move_arr, :normal)
-      elsif other.nil?
-        Movement.create_move(move_arr, :normal)   
-      end
-    end
-
-    moves.concat(special_moves(state))
-
-    return moves.compact
   end
 
   def possible_moves
     @possible_moves
-  end
-  def normal_moves(board); end
-  def special_moves(board) 
-    []
   end
 
   def moved?
@@ -228,12 +222,9 @@ class Queen < Piece
     "\u265B"
   end
 
-  def normal_moves(state)
-    moves(self, state).vertically(1..7).or.
-      horizontally(1..7).or.
-      diagonally(1..7).spaces
+  def generate_possible_moves(state)
+    queen_moves(self, state)
   end
-
 end
 
 class Rook < Piece
@@ -246,11 +237,9 @@ class Rook < Piece
     "\u265C"
   end
 
-  def normal_moves(state)
-    moves(self, state).horizontally(1..7).or.
-      vertically(1..7).spaces
+  def generate_possible_moves(state)
+    rook_moves(self, state)
   end
-
 end
 
 class Knight < Piece
@@ -263,11 +252,9 @@ class Knight < Piece
     "\u265E"
   end
 
-  def normal_moves(state)
-    moves(self, state).horizontally(2).and.vertically(1).or.
-      vertically(2).and.horizontally(1).spaces
+  def generate_possible_moves(state)
+    knight_moves(self, state)
   end
-
 end
 
 class King < Piece
@@ -280,56 +267,9 @@ class King < Piece
     "\u265A"
   end
 
-  def normal_moves(state)
-    moves(self, state).horizontally(1).or.vertically(1).or.diagonally(1).spaces
+  def generate_possible_moves(state)
+    king_moves(self, state)
   end
-
-  def special_moves(state)
-    special_moves_arr = []
-
-    #Castling
-    #Only works if king hasn't moved
-    if !moved?
-      rooks = state.get_pieces(type: "Rook", team: self.team)
-
-      if !rooks.empty?
-        #Check if spaces_on(board) between rook and king are empty
-        rooks.filter! do |rook|
-          !Movement.blocked?(rook, self.current_pos, state, ignore_dest: true)
-        end
-
-        return [] if rooks.empty?
-
-        moves = []
-
-        rooks.each do |rook|
-          if rook.current_pos[1] > self.current_pos[1]
-            move = Movement.create_move([[self, self.current_pos, [self.current_pos[0], self.current_pos[1] + 2]],
-                                         [rook, rook.current_pos, [rook.current_pos[0], self.current_pos[1] + 1]]], :castle)
-
-          else
-            move = Movement.create_move([[self, self.current_pos, [self.current_pos[0], self.current_pos[1] - 2]],
-                                         [rook, rook.current_pos, [rook.current_pos[0], self.current_pos[1] - 1]]], :castle) 
-          end
-          moves << move
-        end
-
-        #Check for check at any square along the path
-        moves.select! do |move|
-          #Get spaces_on(board) between moves
-          #Check if any space between moves can be reached by an enemy piece
-          !Movement.get_spaces_between(self.current_pos, move.destination(self)).any? do |space|
-            Movement.who_can_reach?(space, state).any? do |piece|
-              piece.team != self.team
-            end
-          end
-        end
-
-        special_moves_arr = moves
-      end
-    end
-    return special_moves_arr
-  end 
 end
 
 class Bishop < Piece
@@ -342,10 +282,9 @@ class Bishop < Piece
     "\u265D"
   end
 
-  def normal_moves(board = @board)
-    moves(self, board).diagonally(1..7).spaces
+  def generate_possible_moves(state)
+    bishop_moves(self, state)
   end
-
 end
 
 class Pawn < Piece
@@ -358,60 +297,8 @@ class Pawn < Piece
     "\u265F"
   end
 
-  def normal_moves(state)
-
-    #forward movement
-    unless @moved
-      moves_arr = moves(self, state).forward(1..2).spaces
-    else
-      moves_arr = moves(self, state).forward(1).spaces
-    end
-
-    #diagonal movement
-    diag_capture = moves(self, state).forward(1).and.horizontally(1).spaces(pawn_cap: true)
-    diag_capture.each do |mv|
-      p = state.get_piece_at(mv)
-      if p && p.team != self.team
-        moves_arr << mv
-      end
-    end
-
-    return moves_arr
-  end
-
-  def special_moves(state)
-    special_moves_arr = []
-    
-    #En passant
-    #This move has three conditions:
-    #1. Pawn must be on the third rank forward from its starting position.
-    #2. Enemy pawn must move from its starting position two spaces (adjacent to pawn).
-    #3. Pawn can only do en passant on the immediately following turn.
-    current_pos = state.get_pos(self)
-    diag_moves = moves(self, state).forward(1).and.horizontally(1).spaces
-    if (current_pos[0] - self.starting_pos[0]).abs == 3 #1
-      adj_moves = moves(self, state).horizontally(1).spaces(pawn_cap: true) #2..
-      adj_moves.each_index do |index|
-        something = state.get_piece_at(adj_moves[index])
-        if something && something.kind_of?(Pawn)
-          prev_pos = state.get_previous_pos(something)
-          moved_last_turn = state.get_last_moved == something
-          if moved_last_turn && prev_pos == something.starting_pos #..2, 3
-            special_moves_arr << Movement.create_move([[self, self.current_pos, diag_moves[index]],
-                                                       [something, something.current_pos, nil]], :en_passant)
-          end
-        end
-      end
-    end
-
-=begin Promotion
-    rank = current_pos[0]
-    eligible_for_promotion = self.team == "white" ? rank == 1 : rank == 6 
-    if eligible_for_promotion
-    
-    end
-=end
-    return special_moves_arr
+  def generate_possible_moves(state)
+    pawn_moves(self, state)
   end
 end
 

@@ -126,15 +126,53 @@ class Game
    move = nil
 
    loop do
-       input = player.get_input({})
-       move = to_move(input)
-       valid_move = valid?(move)
-       @messenger.update
-       break if valid_move
+     input = player.get_input({})
+     move = to_move(input)
+
+     handle_promotion(move) if move.get_attr(:type) == :promotion
+     valid_move = valid?(move)
+     @messenger.update
+     break if valid_move
    end
 
    @gamestate.do!(move)
    update_move_history(move)
+ end
+
+ def handle_promotion(move)
+   temp_board = Board.new
+   pop_up_board = get_board_map(temp_board)
+   team = move.get_team
+   promo_pieces = []
+   promo_pieces << Queen.new(team: team)
+   promo_pieces << Rook.new(team: team)
+   promo_pieces << Bishop.new(team: team)
+   promo_pieces << Knight.new(team: team)
+   input_handler = InputHandler.new(in: pop_up_board)
+   
+   i = 0
+   promo_pieces.each do |p|
+     temp_board.place(p, [4, 2 + i])
+     p.set_pos([4, 2 + i])
+     i += 1
+   end
+
+   promote_move = move
+   pop_up_board.update
+   break_loop = false
+   loop do
+     input = input_handler.get_input
+     piece_pos = input[0]
+     promo_pieces.each do |p|
+       if piece_pos == p.current_pos
+         move.set_promotion_piece(p)
+         break_loop = true
+         break 
+       end
+     end
+     break if break_loop
+   end
+   pop_up_board.close
  end
 
  def to_move(input)
@@ -290,7 +328,8 @@ module ChessNotation
     elsif move_type == :castle
       return castle_notation(pieces.first, prev_pos_arr.first, dest_pos_arr.first)
     elsif move_type == :promotion
-      promotion = "=#{@@pieces[pieces.last]}"
+      promoted_to = move.promoted_to
+      promotion = "=#{@@pieces[promoted_to.class.to_s]}"
     end
      
      if pieces.length > 1 && dest_pos_arr.last == nil 
