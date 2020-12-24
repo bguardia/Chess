@@ -29,12 +29,25 @@ module Movement
     end
 
     moves = create_moves(positions, pawn, state)
+    
+    #check for and add promotions
+    to_remove = nil
+    promotions = []
     moves.each do |mv|
       last_rank = pawn.team == "white" ? 0 : 7 
       if mv.destination(pawn)[0] == last_rank
-        mv.set_attr(:type, :promotion)
+        t = pawn.team
+        promotion_pieces = [Rook.new(team: t), Bishop.new(team: t), Queen.new(team: t), Knight.new(team: t)]
+        promotion_pieces.each do |p|
+          new_move = Move.new(move: mv.instructions) 
+          new_move.set_promotion_piece(p)
+          promotions << new_move
+        end        
+        to_remove = mv
       end
     end
+    moves.concat(promotions)
+    moves.delete(to_remove)
 
     moves << en_passant(pawn, state)
     moves.compact
@@ -506,13 +519,16 @@ module Movement
 
     #check for any moves matching given destination
     #and return first match
+    possible_moves = []
     moves.each do |mv|
       $game_debug += mv.to_s
       if mv.destination(piece) == dest_pos
         $game_debug += "Move matched to #{dest_pos}\n"
-        return mv
+        possible_moves << mv
       end
     end
+
+    return possible_moves unless possible_moves.empty?
     #return nil if none match
     return EmptyMove.new #empty move 
   end
@@ -581,7 +597,9 @@ class Move
   end
 
   def ==(other)
-    instructions == other.instructions
+    if other.respond_to?(:instructions)
+      instructions == other.instructions
+    end
   end
 
   def set_promotion_piece(piece)
@@ -592,6 +610,7 @@ class Move
     add([[ pawn, pawn_dest, nil ],
                     [ piece, nil, pawn_dest ]])
 
+    set_attr(:type, :promotion)
     set_attr(:promoted_to, piece)
 =begin
     new_move.set_attr(:promoted_to, piece)
@@ -607,10 +626,14 @@ class Move
     return nil if arr.nil?
 
     if arr.flatten == arr
-      return [arr]
+      return [arr.dup]
     else
-      return arr
+      return arr.map { |row| row.dup }
     end
+  end
+
+  def type
+    get_attr(:type)
   end
 
   def set_attr(attr, val)

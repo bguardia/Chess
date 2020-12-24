@@ -94,6 +94,12 @@ class Board
     piece.set_pos(pos)
   end
 
+  def get_piece_at(pos)
+    r = pos[0]
+    f = pos[1]
+    @arr[r][f]
+  end
+
   public
   def cell_exists?(pos)
     valid_x = pos[1] >= 0 && pos[1] < @width

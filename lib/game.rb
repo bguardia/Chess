@@ -128,8 +128,6 @@ class Game
    loop do
      input = player.get_input({})
      move = to_move(input)
-
-     handle_promotion(move) if move.get_attr(:type) == :promotion
      valid_move = valid?(move)
      @messenger.update
      break if valid_move
@@ -139,9 +137,11 @@ class Game
    update_move_history(move)
  end
 
- def handle_promotion(move)
+ def handle_promotion(moves)
    temp_board = Board.new
    pop_up_board = get_board_map(temp_board)
+   input_handler = InputHandler.new(in: pop_up_board) 
+=begin
    team = move.get_team
    promo_pieces = []
    promo_pieces << Queen.new(team: team)
@@ -149,20 +149,31 @@ class Game
    promo_pieces << Bishop.new(team: team)
    promo_pieces << Knight.new(team: team)
    input_handler = InputHandler.new(in: pop_up_board)
-   
+
    i = 0
    promo_pieces.each do |p|
      temp_board.place(p, [4, 2 + i])
      p.set_pos([4, 2 + i])
      i += 1
    end
+=end
 
-   promote_move = move
+   i = 0
+   moves.each do |mv|
+     p = mv.promoted_to
+     pos = [4, 2 + i]
+     temp_board.place(p, pos)
+     i += 1
+   end 
+
+   piece = nil
    pop_up_board.update
    break_loop = false
    loop do
      input = input_handler.get_input
      piece_pos = input[0]
+     piece = temp_board.get_piece_at(piece_pos) 
+=begin
      promo_pieces.each do |p|
        if piece_pos == p.current_pos
          move.set_promotion_piece(p)
@@ -170,18 +181,28 @@ class Game
          break 
        end
      end
-     break if break_loop
+=end
+     break if piece
    end
    pop_up_board.close
+
+   return piece
  end
 
  def to_move(input)
+   move = nil
    if input.kind_of?(String)
      move = ChessNotation.from_notation(input, @gamestate)
    else
      piece_pos = input[0]
      dest_pos = input[1]
-     move = Movement.return_move(piece_pos, dest_pos, @gamestate)
+     moves = Movement.return_move(piece_pos, dest_pos, @gamestate)
+     if moves.length > 1 && moves[0].type == :promotion
+       piece = handle_promotion(moves)
+       move = moves.find { |mv| mv.promoted_to == piece }
+     else
+       move = moves.first
+     end
    end
 
    return move
