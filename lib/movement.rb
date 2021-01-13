@@ -116,8 +116,8 @@ module Movement
       rooks = state.get_pieces(type: "Rook", team: king.team, moved: false)
       rooks.each do |rook|
         spaces_between = Movement.get_spaces_between(king.current_pos, rook.current_pos)
-        blocked = spaces_between.map { |pos| state.get_piece_at(pos) }.compact.empty?
-        unless blocked
+        not_blocked = spaces_between.map { |pos| state.get_piece_at(pos) }.compact.empty?
+        if not_blocked
           king_dest = [ rook.current_pos[0] < king.current_pos[0] ? 2 : 6, king.current_pos[1]]
           rook_dest = [ rook.current_pos[0] < king.current_pos[0] ? 3 : 5, rook.current_pos[1]]
           castles << Move.new(move: [[king, king.current_pos, king_dest],
