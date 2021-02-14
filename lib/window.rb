@@ -979,7 +979,15 @@ class CursorMap < Map
     @stored_input = nil
     $window_debug += "#{self.class}.post_initialize called."
   end
- 
+
+  def pos_x
+    @pos_x
+  end
+
+  def pos_y
+    @pos_y
+  end
+
   def reset_pos
     @cursor_x = 0
     @cursor_y = 0

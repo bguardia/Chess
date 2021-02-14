@@ -141,6 +141,7 @@ class Game
    temp_board = Board.new
    pop_up_board = get_board_map(temp_board)
    input_handler = InputHandler.new(in: pop_up_board) 
+
 =begin
    team = move.get_team
    promo_pieces = []
@@ -168,11 +169,16 @@ class Game
 
    piece = nil
    pop_up_board.update
-   break_loop = false
    loop do
-     input = input_handler.get_input
-     piece_pos = input[0]
+     input = input_handler.get_input( { Keys::ENTER => -> {
+                                      $game_debug += "Entered game's ENTER lambda.\n Current coords are: [#{pop_up_board.pos_y}, #{pop_up_board.pos_x}]"
+                                      input_handler.request([pop_up_board.pos_y, pop_up_board.pos_x])
+                                      input_handler.break}} )
+        
+     $game_debug += "Returned input is #{input} \n"
+     piece_pos = input
      piece = temp_board.get_piece_at(piece_pos) 
+     $game_debug += "piece is: #{piece}"
 =begin
      promo_pieces.each do |p|
        if piece_pos == p.current_pos
@@ -185,6 +191,7 @@ class Game
      break if piece
    end
    pop_up_board.close
+   $game_debug += "Broke out of piece-getting loop \n"
 
    return piece
  end

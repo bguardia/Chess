@@ -41,11 +41,13 @@ class InputHandler
     @key_map = args.fetch(:key_map, {})
     @received_input = nil
     @interactive = args.fetch(:in)
+    @break = false
   end
 
   def get_input(key_map_arg = {})
     @interactive.before_get_input
-
+    @break = false
+    @requested = nil
     loop do
       #Key map is constantly updated. Order of preference:
       #Map passed through args > window args > default args
@@ -57,13 +59,29 @@ class InputHandler
         @interactive.handle_unmapped_input(input)
       end
 
-      break if @interactive.break_condition
+      break if break_condition
     end 
 
     @interactive.post_get_input 
-    return @interactive.return_input
+    return_input
   end
 
+  def request(data)
+    @requested = data
+  end
+
+  def break_condition
+    @break || @interactive.break_condition
+  end
+
+  public
+  def break
+    @break = true
+  end
+
+  def return_input
+    @requested || @interactive.return_input
+  end
 end
 
 =begin
