@@ -142,23 +142,7 @@ class Game
    pop_up_board = get_board_map(temp_board)
    input_handler = InputHandler.new(in: pop_up_board) 
 
-=begin
-   team = move.get_team
-   promo_pieces = []
-   promo_pieces << Queen.new(team: team)
-   promo_pieces << Rook.new(team: team)
-   promo_pieces << Bishop.new(team: team)
-   promo_pieces << Knight.new(team: team)
-   input_handler = InputHandler.new(in: pop_up_board)
-
-   i = 0
-   promo_pieces.each do |p|
-     temp_board.place(p, [4, 2 + i])
-     p.set_pos([4, 2 + i])
-     i += 1
-   end
-=end
-
+   #place pieces on temporary board
    i = 0
    moves.each do |mv|
      p = mv.promoted_to
@@ -169,29 +153,19 @@ class Game
 
    piece = nil
    pop_up_board.update
+
+   #get input from input_handler until a valid piece is selected
    loop do
+     #Bypass normal board behavior by supplying optional key map
      input = input_handler.get_input( { Keys::ENTER => -> {
-                                      $game_debug += "Entered game's ENTER lambda.\n Current coords are: [#{pop_up_board.pos_y}, #{pop_up_board.pos_x}]"
                                       input_handler.request([pop_up_board.pos_y, pop_up_board.pos_x])
                                       input_handler.break}} )
         
-     $game_debug += "Returned input is #{input} \n"
      piece_pos = input
      piece = temp_board.get_piece_at(piece_pos) 
-     $game_debug += "piece is: #{piece}"
-=begin
-     promo_pieces.each do |p|
-       if piece_pos == p.current_pos
-         move.set_promotion_piece(p)
-         break_loop = true
-         break 
-       end
-     end
-=end
      break if piece
    end
    pop_up_board.close
-   $game_debug += "Broke out of piece-getting loop \n"
 
    return piece
  end

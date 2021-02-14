@@ -31,10 +31,10 @@ module Movement
     moves = create_moves(positions, pawn, state)
     
     #check for and add promotions
-    to_remove = nil
-    promotions = []
+    to_remove = [] #array of all old moves to be removed 
+    promotions = [] #array of new promotion moves
+    last_rank = pawn.team == "white" ? 0 : 7 
     moves.each do |mv|
-      last_rank = pawn.team == "white" ? 0 : 7 
       if mv.destination(pawn)[0] == last_rank
         t = pawn.team
         promotion_pieces = [Rook.new(team: t), Bishop.new(team: t), Queen.new(team: t), Knight.new(team: t)]
@@ -43,11 +43,14 @@ module Movement
           new_move.set_promotion_piece(p)
           promotions << new_move
         end        
-        to_remove = mv
+        to_remove << mv
       end
     end
-    moves.concat(promotions)
-    moves.delete(to_remove)
+
+    moves.concat(promotions) #add promotion versions of created moves
+    to_remove.each do |mv|
+      moves.delete(mv) #remove any previous versions of same moves
+    end
 
     moves << en_passant(pawn, state)
     moves.compact
