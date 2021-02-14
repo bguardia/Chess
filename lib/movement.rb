@@ -507,7 +507,7 @@ module Movement
   def self.return_move(piece_pos, dest_pos, board)
     $game_debug += "called Movement.return_move(#{piece_pos}, #{dest_pos}, board)\n"
     piece = board.get_piece_at(piece_pos)
-    return EmptyMove.new if piece.nil?
+    return [EmptyMove.new] if piece.nil?
 
     moves = piece.possible_moves
 
@@ -530,7 +530,7 @@ module Movement
 
     return possible_moves unless possible_moves.empty?
     #return nil if none match
-    return EmptyMove.new #empty move 
+    return [EmptyMove.new] #empty move 
   end
 
   def self.create_move(move_arr, type)
