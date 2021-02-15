@@ -478,6 +478,7 @@ module Movement
     #attacking_moves.each { |mv| $game_debug += "#{mv}" }
     #If attackers, make sure move stops any possible attacks
 
+    valid_moves = []
     unless attacking_moves.empty?
       #get spaces between king and attackers
       spaces_arr = []
@@ -492,36 +493,26 @@ module Movement
      end
      #get intersection of spaces (in case of multiple attackers 
      spaces = spaces_arr.reduce(spaces_arr[0]) { |a,b| a.intersection(b) }
-     $game_debug += "spaces equals: #{spaces}\n"
      #check each move for matches (or escapes if king)
      moves.each do |mv|
        blocks = false
        king_escapes = false
        piece = mv.get_piece
-       #$game_debug += "for #{piece.team} #{piece.class} (#{piece.id})\n"
        unless piece.kind_of?(King)
-         #$game_debug += "checking for matches with attacker spaces...\n"
-         #$game_debug += "Move destination is #{mv.destination(piece)}\n"
          blocks = spaces.any? do |space|
-           #$game_debug += "space: #{space}\n"
            mv.destination(piece) == space
          end
-         #$game_debug += "blocks is #{blocks}\n"
        else
-        state.do!(mv)
-        king_escapes = !state.in_check?(king: king)
-        state.undo
+        temp_state = state.do(mv).data
+        king_escapes = !temp_state.in_check?(king: king)
        end
-
+     
       mv.set_attr(:invalid, true) unless blocks || king_escapes
       end
     end
-    #$game_debug += "Blocked moves includes:\n"
-    #blocked_moves.each { |mv| $game_debug += "#{mv}" }
-    #
+    
     #Check moves against any blocked checks
-    #blocked_valid_moves = []
-    blocked_invalid_moves = []
+    blocked_valid_moves = []
     unless blocked_moves.empty?
       blocked_moves.each do |blkdmv|
         spaces_between = get_spaces_between(king.current_pos, blkdmv.get_piece.current_pos)
@@ -534,16 +525,10 @@ module Movement
           end
         end
       end
-      #blocked_valid_moves = moves.difference(blocked_invalid_moves)
     end
-=begin
-    #set invalid to true for all invalid moves
-    blocked_invalid_moves.each do |badmv|
-      $game_debug += "Following move set to invalid: \n #{badmv}\n"
-      badmv.set_attr(:invalid, true)
-    end
-=end
 
+=begin  
+  #for debugging
   $game_debug += "Move Validation Report: \n"
   moves.each do |move|
     p = move.get_piece
@@ -554,6 +539,9 @@ module Movement
     invalid = move.get_attr(:invalid)
     $game_debug += "#{t} #{p} (#{id}): #{prev_pos} -> #{pos}, invalid?: #{invalid}, obj_id: #{move.object_id}\n"
   end
+=end
+
+  return moves
   end
 
   def self.in_check?(king, board)

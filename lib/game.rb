@@ -113,9 +113,24 @@ class Game
  end
 
  def player_turn(player = @current_player)
-   Movement.validate_moves(@gamestate.get_moves(team: player.team), @gamestate)
    move = nil
+   valid_moves = Movement.validate_moves(@gamestate.get_moves(team: player.team), @gamestate)
+   @gamestate.update_moves(valid_moves)
 
+=begin
+   $game_debug += "Moves for #{player.team} have been validated. Moves are: \n"
+   @gamestate.get_moves(team: player.team).each do |move|
+    p = move.get_piece
+    t = p.team
+    id = p.id
+    prev_pos = p.current_pos
+    pos = move.destination(p)
+    invalid = move.get_attr(:invalid)
+    $game_debug += "#{t} #{p} (#{id}): #{prev_pos} -> #{pos}, invalid?: #{invalid}, obj_id: #{move.object_id}\n"
+  end
+=end
+
+   #input loop
    loop do
      input = player.get_input({})
      move = to_move(input)

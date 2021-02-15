@@ -320,6 +320,11 @@ class StateTree
     prev_state.get_pos(piece)
   end
 
+  def update_moves(moves)
+    @current_node.data.update_moves(moves)
+    notify_observers
+  end
+
   def get_pos(piece)
     @current_node.data.get_pos(piece)
   end
@@ -435,6 +440,25 @@ class State
       exists = @pieces[piece][:pos]
       @pieces[piece].merge!({ :moves => exists ? piece.generate_possible_moves(self) : nil }) 
     end
+  end
+
+  def update_moves(moves)
+
+    #sort moves by piece
+    move_hash = moves.reduce({}) do |hash, move|
+      piece = move.get_piece
+      if hash.has_key?(piece)
+        hash[piece] << move
+      else
+        hash[piece] = [move]
+      end
+      hash
+    end
+
+    #merge movesets into @pieces hash
+    move_hash.each_pair do |piece, moves|
+      @pieces[piece].merge!({ :moves => moves })
+    end 
   end
 
   def set_pieces(pieces, initial = false)
