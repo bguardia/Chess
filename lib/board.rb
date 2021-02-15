@@ -332,6 +332,10 @@ class StateTree
     @current_node.data.get_moved_status(piece)
   end
 
+  def get_last_move
+    @current_node.data.last_move
+  end
+
   def get_last_moved
     @current_node.data.get_last_moved
   end
@@ -525,7 +529,7 @@ class State
       @pieces[piece][:moves]
     end
 
-    return moves
+    return moves.flatten
   end
 
   def get_pieces(args = {})
@@ -563,6 +567,7 @@ class State
     attackers = enemy_pieces.filter do |ep|
       ep_moves = get_moves(id: ep.id).flatten
       ep_moves.any? do |move|
+        next if move.blocked?
         move.include?(king_pos)
       end
     end

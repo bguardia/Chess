@@ -58,7 +58,12 @@ module Movement
 
   def bishop_moves(bishop, state)
      positions = MovementArray.new(bishop, state).diagonally(1..7).spaces
-     create_moves(positions, bishop, state)
+     moves = create_moves(positions, bishop, state)
+     $game_debug += "#{bishop.team} Bishop (#{bishop.id}) moves:\n"
+     moves.each do |mv|
+       $game_debug += "#{mv}\n captures: #{mv.get_attr(:capture)}, blocked?: #{mv.blocked?}, invalid?: #{mv.get_attr(:invalid)}\n"
+     end
+     moves
   end
 
   def queen_moves(queen, state)
@@ -154,11 +159,13 @@ module Movement
       move << ([dest_piece, dest_piece.current_pos, nil]) if dest_piece
 
       move_hash_arr << { move: move,
-                         blocked: blocked }     
+                         blocked: blocked,
+                         capture: dest_piece }     
       end
 
     move_hash_arr.each do |mvh|
-      move_arr << Move.new(mvh)
+      move = Move.new(mvh)
+      move_arr << move 
     end
 
     return move_arr
@@ -350,6 +357,7 @@ module Movement
 
       $movement_debug += "Positions off board have been filtered. Now: #{on_board}\n"
 
+=begin
       unless @piece.kind_of?(Knight)
         $movement_debug += "Piece is not a knight. Filtering blocked moves...\n"
         on_board.filter! do |move|
@@ -357,6 +365,7 @@ module Movement
         end
         $movement_debug += "Blocked moves have been filtered. Remaining moves: #{on_board}\n"
       end
+=end
 
       #pawns cannot capture pieces unless moving diagonally,
       #so set :pawn_cap to true for diagonal movement
@@ -440,6 +449,114 @@ module Movement
     spaces_between.pop
 
     return spaces_between
+  end
+
+  def self.validate_moves(moves, state)
+    stops_check = true
+    causes_check = false
+
+    p = moves[0].get_piece
+    king = state.get_pieces(type: "King", team: p.team)[0]
+    enemy_team = ["white", "black"].find { |t| t != p.team }
+    enemy_pieces = state.get_pieces(team: enemy_team)
+    attacking_moves = []
+    blocked_moves = []
+
+    $game_debug += "enempy pieces: \n"
+    enemy_pieces.each { |ep| $game_debug += "#{ep}, " }
+    $game_debug += "\n"
+    #get moves that would reach king (blocked and unblocked)
+    enemy_pieces.each do |ep|
+      $game_debug += "Possible moves: \n"
+      ep.possible_moves.each do |mv|
+        if mv.captures?(king)
+         $game_debug += "-> adding move to attacking_moves \n" 
+          attacking_moves << mv
+        end
+      end
+      $game_debug += "Blocked moves: \n"
+      ep.blocked_moves.each do |mv|
+        $game_debug += "#{mv}\n"
+        $game_debug += "captures: #{mv.get_attr(:capture)}\n"
+        if mv.captures?(king)
+          $game_debug += "-> adding move to blocked_moves \n"
+          blocked_moves << mv
+        end
+      end
+    end
+
+    valid_moves = []
+    invalid_moves = []
+    $game_debug += "Attacking moves (length:#{attacking_moves.length}) includes:\n"
+    attacking_moves.each { |mv| $game_debug += "#{mv}" }
+    #If attackers, make sure move stops any possible attacks
+    unless attacking_moves.empty?
+      #get spaces between king and attackers
+      spaces_arr = []
+      attacking_moves.each do |atkmv|
+        attacker = atkmv.get_piece
+        spaces_between = []
+        unless attacker.kind_of?(Knight)
+          spaces_between = get_spaces_between(king.current_pos, attacker.current_pos)
+        end
+        spaces_between << attacker.current_pos
+        spaces_arr << spaces_between 
+     end
+     #get intersection of spaces (in case of multiple attackers 
+     spaces = spaces_arr.reduce(spaces_arr[0]) { |a,b| a.intersection(b) }
+
+     moves.filter do |mv|
+       blocks = false
+       king_escapes = false
+       piece = mv.get_piece
+       $game_debug += "for #{piece.team} #{piece.class} (#{piece.id})\n"
+       unless piece.kind_of?(King)
+         $game_debug += "checking for matches with attacker spaces...\n"
+         $game_debug += "Move destination is #{move.destination(piece)}\n"
+         blocks = spaces.any? do |space|
+           $game_debug += "space: #{space}\n"
+           mv.destination(piece) == space
+         end
+         $game_debug += "blocks is #{blocks}\n"
+       else
+        board.do(mv)
+        king_escapes = !Movement.in_check?(king, board)
+        board.undo(move)
+       end
+
+       if blocks || king_escapes
+        valid_moves << mv
+       else 
+        invalid_moves << mv
+       end    
+    end
+    end
+    $game_debug += "Blocked moves includes:\n"
+    blocked_moves.each { |mv| $game_debug += "#{mv}" }
+
+    #Check moves against any blocked checks
+    blocked_valid_moves = []
+    blocked_invalid_moves = []
+    unless blocked_moves.empty?
+      blocked_moves.each do |blkdmv|
+        spaces_between = get_spaces_between(king.current_pos, blkdmv.get_piece.current_pos)
+        blocking_pieces = spaces_between.map { |s| state.get_piece_at(s) }.compact
+        $game_debug += "blocking pieces is: #{blocking_pieces}\n"
+        moves.each do |move|
+          piece = move.get_piece
+          if blocking_pieces.include?(piece) && !spaces_between.include?(move.destination(piece)) && blocking_pieces.length == 1     
+           blocked_invalid_moves << move
+          end
+        end
+      end
+      blocked_valid_moves = moves.difference(blocked_invalid_moves)
+    end
+
+    #set invalid to true for all invalid moves
+    blocked_invalid_moves.concat(invalid_moves).uniq.each do |badmv|
+      badmv.set_attr(:invalid, true)
+    end
+
   end
 
   def self.in_check?(king, board)
@@ -568,7 +685,8 @@ class Move
                     :check => false,
                     :checkmate => false,
                     :notation => nil,
-                    :promoted_to => nil    }
+                    :promoted_to => nil,
+                    :invalid => false    }
   end
 
   def get_team
@@ -656,6 +774,14 @@ class Move
     end
 
     return false
+  end
+
+  def blocked?
+    get_attr(:blocked)
+  end
+
+  def captures?(piece)
+    get_attr(:capture) == piece
   end
 
   def each (&block)

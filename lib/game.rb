@@ -35,16 +35,7 @@ class Game
   $game_debug += "pieces: \n#{pieces}"
   StateTree.new(pieces)
  end
-=begin
- def set_up_board
-   @sets.each do |set|
-     set.each do |piece|
-       piece.add_to_board(@board)
-     end
-   end
-   board.update_gamestate
- end
-=end
+
  def set_up_messenger
    @msg_arr = []
    @messenger = List.new(height: 3, width: 30, content: @msg_arr, top: 5, left: 5, lines: 1)
@@ -102,7 +93,6 @@ class Game
 
  def play
    game_over = false
-
    until game_over
      @io_stream.update
      player_turn
@@ -123,6 +113,7 @@ class Game
  end
 
  def player_turn(player = @current_player)
+   Movement.validate_moves(@gamestate.get_moves(team: player.team), @gamestate)
    move = nil
 
    loop do
@@ -135,6 +126,15 @@ class Game
 
    @gamestate.do!(move)
    update_move_history(move)
+ end
+
+ def highlight_moves(piece, win)
+   return nil unless piece
+   piece.possible_moves.map do |mv|
+     pos = mv.destination(something)
+     win.highlight_cell(pos)
+   end
+   win.highlight_cell(piece.current_pos)
  end
 
  def handle_promotion(moves)

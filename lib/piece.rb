@@ -92,6 +92,8 @@ class Piece
     @icon = args.fetch(:icon, false) || get_icon
     @moved = args.fetch(:moved, false)
     @id = @@next_piece_id
+    @possible_moves = []
+    @blocked_moves = []
     @@next_piece_id += 1
     @@pieces << self
   end
@@ -101,7 +103,15 @@ class Piece
   end
 
   def set_moves(moves)
-    @possible_moves = moves
+    @possible_moves = []
+    @blocked_moves = []
+    moves.each do |mv|
+      unless mv.blocked?
+        @possible_moves << mv
+      else
+        @blocked_moves << mv
+      end
+    end
   end
 
   def set_moved(bool)
@@ -179,7 +189,11 @@ class Piece
   end
 
   def possible_moves
-    @possible_moves
+    @possible_moves.filter { |mv| !mv.get_attr(:invalid) }
+  end
+
+  def blocked_moves
+    @blocked_moves
   end
 
   def moved?
