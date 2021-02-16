@@ -1,6 +1,5 @@
 require './lib/chess.rb'
 
-
 $movement_debug = ""
 
 module Movement
@@ -149,13 +148,14 @@ module Movement
         next
       end
 
-      spaces_between = Movement.get_spaces_between(piece.current_pos, dest_pos)
+      current_pos = state.get_pos(piece)
+      spaces_between = Movement.get_spaces_between(current_pos, dest_pos)
       blocked = spaces_between.any? do |space|
         state.get_piece_at(space)
       end
       blocked = false if piece.kind_of?(Knight)
 
-      move = [[piece, state.get_pos(piece), dest_pos]]
+      move = [[piece, current_pos, dest_pos]]
       move << ([dest_piece, state.get_pos(dest_piece), nil]) if dest_piece
 
       move_hash_arr << { move: move,
@@ -446,7 +446,7 @@ module Movement
       spaces_between << start.dup
     end
 
-    spaces_between.pop
+    spaces_between.pop #removes the destination coordinates
 
     return spaces_between
   end
