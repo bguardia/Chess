@@ -515,8 +515,11 @@ module Movement
     blocked_valid_moves = []
     unless blocked_moves.empty?
       blocked_moves.each do |blkdmv|
-        spaces_between = get_spaces_between(king.current_pos, blkdmv.get_piece.current_pos)
-        blocking_pieces = spaces_between.map { |s| state.get_piece_at(s) }.compact
+        #Get all spaces between blocked piece and king (including blocked piece)
+        blkd_atk_pos = blkdmv.get_piece.current_pos
+        spaces_between = get_spaces_between(king.current_pos, blkd_atk_pos)
+        blocking_pieces = spaces_between.map { |s| state.get_piece_at(s) }.compact #get blocking pieces before adding blocked piece space
+        spaces_between << blkd_atk_pos
         #$game_debug += "blocking pieces is: #{blocking_pieces}\n"
         moves.each do |move|
           piece = move.get_piece
