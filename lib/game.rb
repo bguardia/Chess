@@ -7,7 +7,7 @@ $game_debug = ""
 
 class Game
 
- attr_reader :players, :board, :sets
+ attr_reader :players, :board, :sets 
 
  def initialize(args = {})
    @players = args.fetch(:players, false) || create_players
@@ -70,6 +70,7 @@ class Game
  end
 
  def game_over?
+   $game_debug += "Called game_over? \n"
    return @gamestate.checkmate?(@current_player.team)
  end
 
@@ -114,21 +115,11 @@ class Game
 
  def player_turn(player = @current_player)
    move = nil
-   valid_moves = Movement.validate_moves(@gamestate.get_moves(team: player.team), @gamestate)
-   @gamestate.update_moves(valid_moves)
 
-=begin
-   $game_debug += "Moves for #{player.team} have been validated. Moves are: \n"
-   @gamestate.get_moves(team: player.team).each do |move|
-    p = move.get_piece
-    t = p.team
-    id = p.id
-    prev_pos = p.current_pos
-    pos = move.destination(p)
-    invalid = move.get_attr(:invalid)
-    $game_debug += "#{t} #{p} (#{id}): #{prev_pos} -> #{pos}, invalid?: #{invalid}, obj_id: #{move.object_id}\n"
-  end
-=end
+   #Get player's possible moves and validate them
+   move_list = @gamestate.get_moves(team: player.team)
+   valid_moves = Movement.validate_moves(move_list, @gamestate)
+   @gamestate.update_moves(valid_moves)
 
    #input loop
    loop do
@@ -232,7 +223,7 @@ class Game
      @msg_arr << "Destination is occupied by a friendly piece."
      return false
    end
-
+=begin
    #Check for check
    check_before_move = @gamestate.in_check?(team: piece.team)
    @gamestate.do!(move)
@@ -245,7 +236,7 @@ class Game
      @msg_arr << "Move puts king in check."
      return false
    end
-
+=end
    @msg_arr << ""
    return true
  end

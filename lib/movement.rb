@@ -58,16 +58,25 @@ module Movement
   def bishop_moves(bishop, state)
      positions = MovementArray.new(bishop, state).diagonally(1..7).spaces
      moves = create_moves(positions, bishop, state)
-     $game_debug += "#{bishop.team} Bishop (#{bishop.id}) moves:\n"
-     moves.each do |mv|
-       $game_debug += "#{mv}\n captures: #{mv.get_attr(:capture)}, blocked?: #{mv.blocked?}, invalid?: #{mv.get_attr(:invalid)}\n"
-     end
+     #$game_debug += "#{bishop.team} Bishop (#{bishop.id}) moves:\n"
+     #moves.each do |mv|
+      # $game_debug += "#{mv}\n captures: #{mv.get_attr(:capture)}, blocked?: #{mv.blocked?}, invalid?: #{mv.get_attr(:invalid)}\n"
+     #end
      moves
   end
 
   def queen_moves(queen, state)
     positions = MovementArray.new(queen, state).diagonally(1..7).or.horizontally(1..7).or.vertically(1..7).spaces
     create_moves(positions, queen, state)
+    moves = create_moves(positions, queen, state)
+=begin
+    $game_debug += "#{queen.team} #{queen.class} (#{queen.id}) moves:\n"
+    moves.each do |mv|
+      $game_debug += "#{mv}\n captures: #{mv.get_attr(:capture)}, blocked?: #{mv.blocked?}, invalid?: #{mv.get_attr(:invalid)}\n\n"
+    end
+=end
+    moves
+
   end
 
   def king_moves(king, state)
@@ -144,6 +153,13 @@ module Movement
 
     moves.each do |dest_pos|
       dest_piece = state.get_piece_at(dest_pos)
+=begin
+      if piece.kind_of?(Queen)
+        dest_team = dest_piece.nil? ? "-" : dest_piece.team
+        dest_class = dest_piece.nil? ? "-" : dest_piece.class
+        $game_debug += "Queen: #{state.get_pos(piece)} -> #{dest_pos}; dest_piece: #{dest_team} #{dest_class}\n" 
+      end
+=end
       if dest_piece && dest_piece.team == piece.team
         next
       end
@@ -156,7 +172,7 @@ module Movement
       blocked = false if piece.kind_of?(Knight)
 
       move = [[piece, current_pos, dest_pos]]
-      move << ([dest_piece, state.get_pos(dest_piece), nil]) if dest_piece
+      move << [dest_piece, state.get_pos(dest_piece), nil] if dest_piece
 
       move_hash_arr << { move: move,
                          blocked: blocked,
@@ -457,6 +473,10 @@ module Movement
     enemy_team = ["white", "black"].find { |t| t != p.team }
     enemy_pieces = state.get_pieces(team: enemy_team)
    
+    $game_debug += "Listing moves sent to validate_moves:\n"
+    moves.each do |mv|
+      $game_debug += "#{mv}\n"
+    end
     
     #get moves that would reach king (blocked and unblocked)
     attacking_moves = []
@@ -482,8 +502,10 @@ module Movement
     unless attacking_moves.empty?
       #get spaces between king and attackers
       spaces_arr = []
+      $game_debug += "Attackers are: \n"
       attacking_moves.each do |atkmv|
         attacker = atkmv.get_piece
+        $game_debug += "#{attacker.team} #{attacker.class} (#{attacker.id})\n"
         spaces_between = []
         unless attacker.kind_of?(Knight)
           spaces_between = get_spaces_between(king.current_pos, attacker.current_pos)
@@ -494,7 +516,10 @@ module Movement
      #get intersection of spaces (in case of multiple attackers 
      spaces = spaces_arr.reduce(spaces_arr[0]) { |a,b| a.intersection(b) }
      #check each move for matches (or escapes if king)
+     $game_debug += "\nSpaces to check are: #{spaces}\n"
+     $game_debug += "Checking moves that match the spaces given...\n"
      moves.each do |mv|
+       #$game_debug += "#{mv}\n"
        blocks = false
        king_escapes = false
        piece = mv.get_piece
@@ -506,9 +531,10 @@ module Movement
         temp_state = state.do(mv).data
         king_escapes = !temp_state.in_check?(king: king)
        end
-     
+      #$game_debug += "blocks: #{blocks}, king_escapes: #{king_escapes}\n\n"
       mv.set_attr(:invalid, true) unless blocks || king_escapes
       end
+     #$game_debug += "\n\n"
     end
     
     #Check moves against any blocked checks
@@ -797,7 +823,7 @@ class Move
   end
 
   def to_s
-    str = "Move:\n"
+    str = "Move (#{self.object_id}) :\n"
     each do |p, cur_pos, dest_pos|
       str += "-> #{p.class} (#{p.id}), #{cur_pos}, #{dest_pos}\n"
     end

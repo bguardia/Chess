@@ -256,6 +256,8 @@ end
 
 class StateTree
 
+  attr_reader :current_node
+
   def initialize(pieces)
     @first_node = Node.new(State.new(pieces: pieces))
     @current_node = @first_node
@@ -279,14 +281,21 @@ class StateTree
   end
 
   def do(move)
+    $game_debug += "called statetree.do\n"
+    $game_debug += "Checking if child node for move already exists...\n"
+    $game_debug += "#{move}\n"
     next_state = @current_node.child_nodes.find do |node|
       state = node.data
+      $game_debug += "child node is:\n #{state}\n"
+      $game_debug += "last move is: \n#{state.last_move}\n"
       state.last_move == move
     end
 
     if next_state
+      $game_debug += "Moves matched. Next state is: \n #{next_state}\n"
       next_state
     else
+      $game_debug += "Move did not match any child nodes. Creating new state.\n"
       new_state(move)
     end
   end
@@ -362,6 +371,7 @@ class StateTree
   end
 
   def checkmate?(team)
+    $game_debug += "Called statetree.checkmate?\n"
     #@current_node.data.checkmate?(team)
     state = @current_node.data
     return false unless in_check?(team: team)
@@ -404,6 +414,25 @@ class StateTree
     end
 
     return checkmate
+  end
+
+  def to_s
+    queue = [@first_node]
+    str = ""
+    loop do
+      node = queue.pop
+      unless node.nil?
+        node.child_nodes.each do |child_node|
+          queue << child_node
+        end
+      end
+      if node == @current_node
+        str += "*Current Node*\n"
+      end
+      str += node.data.to_s
+      break if queue.empty?
+    end
+    return str
   end
 
 end
@@ -474,21 +503,17 @@ class State
 
   public
   def do(move)
-    $game_debug += "Called State.do\n"
-
-    pieces_hash = @pieces.merge({}) #make a copy
-
-    $game_debug += "current state is: \n"
-    pieces_hash.each_pair do |p, val|
-      prev = val[:prev_pos]
-      pos = val[:pos]
-      $game_debug += "#{p.class} (#{p.id}) => :prev_pos #{prev}, :pos #{pos}\n"
-    end
-
+    #make a copy of every piece hash
+    pieces_hash = {}
+    @pieces.each_key do |piece|
+      if @pieces[piece].kind_of?(Hash)
+        pieces_hash[piece] = @pieces[piece].merge
+      end 
+    end 
+    
+    #Apply move instructions to pieces_hash
     move.each do |piece, current_pos, dest_pos|
-      $game_debug += "move: [#{piece.class} (#{piece.id}), #{current_pos}, #{dest_pos}]\n"
       if dest_pos
-        $game_debug += "-> has dest_pos \n"
         pieces_hash[piece] = { :prev_pos => current_pos,
                                :pos => dest_pos,
                                :moved => true }
@@ -496,19 +521,14 @@ class State
         pieces_hash.delete(piece)
       end
     end
-    
-    $game_debug += "state now is: \n"
-    pieces_hash.each_pair do |p, val|
-      prev = val[:prev_pos]
-      pos = val[:pos]
-      $game_debug += "#{p.class} (#{p.id}) => :prev_pos #{prev}, :pos #{pos}\n"
-    end
 
+    #Reset check values
     check = { "white" => nil,
               "black" => nil }
     
     last_move = move
 
+    #Return as new state
     return State.new(pieces_hash: pieces_hash,
                      check: check,
                      last_move: move)
@@ -645,6 +665,20 @@ class State
 
     @checkmate[team] = checkmate
     return checkmate
+  end
+
+  def to_s
+    str = "State #{self.object_id}\n { \n"
+    @pieces.each_key do |piece|
+      prev_pos = @pieces[piece][:prev_pos]
+      pos = @pieces[piece][:pos]
+      num_moves = @pieces[piece][:moves].filter { |mv| !mv.blocked? }.length
+      str += "#{piece.id}. #{piece.team} #{piece.class}: prev_pos: #{prev_pos}, pos: #{pos}, num_moves: #{num_moves}"
+      str += "\n"
+    end
+    str += "\n } \n"
+
+    return str
   end
 
 end
