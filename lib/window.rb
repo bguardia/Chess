@@ -461,6 +461,11 @@ class Window
     @win.close
   end
 
+  def clear
+    @win.erase
+    @content = ""
+  end
+
   def create_win
     @border_win = Curses::Window.new(@height, @width, @top, @left)
     
@@ -770,6 +775,12 @@ class Map < Window
     @win.refresh
     $window_debug += "#{self.class} after update is:\n#{to_s}"
     $window_debug += "@arr.object_id is: #{@arr.object_id}"
+  end
+
+  def highlight_cell(pos, color = [:black, :yellow])
+    str_pos = arr_to_str_pos(pos)
+    chr = @str_arr[str_pos[0]][str_pos[1]]
+    c_temp_highlight(@win, chr, str_pos, color)
   end
 
   def to_s
@@ -1122,27 +1133,120 @@ class CursorMap < Map
 
 end
 
+module WindowTemplates
 
-  test_str = "  a b c d e f g h   \n" +
-             "1|X X X X X X X X | \n" +
-             "2|X X X X X X X X | \n" +
-             "3|X X X X X X X X | \n" +
-             "4|X X X X X X X X | \n" +
-             "5|X X X X X X X X | \n" +
-             "6|X X X X X X X X | \n" +
-             "7|X X X X X X X X | \n" +
-             "8|X X X X X X X X | \n" + 
-             " ------------------ \n"
+  def self.pop_up(window)
+    #initiates a window that disappears after receiving input
+  end
+
+  def self.game_board(args = {})
+    board_str = "   a  b  c  d  e  f  g  h   \n" +
+             "8| X  X  X  X  X  X  X  X | \n" +
+             "7| X  X  X  X  X  X  X  X | \n" +
+             "6| X  X  X  X  X  X  X  X | \n" +
+             "5| X  X  X  X  X  X  X  X | \n" +
+             "4| X  X  X  X  X  X  X  X | \n" +
+             "3| X  X  X  X  X  X  X  X | \n" +
+             "2| X  X  X  X  X  X  X  X | \n" +
+             "1| X  X  X  X  X  X  X  X | \n" + 
+             " -------------------------- \n"
    
-  bg_map =     "BBBBBBBBBBBBBBBBBBBB\n" +
-             (("BBmmwwmmwwmmwwmmwwBB\n" +
-               "BBwwmmwwmmwwmmwwmmBB\n") * 4) +
-               "BBBBBBBBBBBBBBBBBBBB\n"
+    bg_map = "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" +
+             (("bbMMMWWWMMMWWWMMMWWWMMMWWWbb\n" +
+               "bbWWWMMMWWWMMMWWWMMMWWWMMMbb\n") * 4) +
+               "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
 
-  fg_map =     "  wwmmwwmmwwmmwwmm  \n" +
-             (("ww                  \n" +
-               "mm                  \n") * 4 ) +
-               "                    "
+    fg_map = "  WWWMMMWWWMMMWWWMMMWWWMMM  \n" +
+             (("WW                          \n" +
+               "MM                          \n") * 4 ) +
+               "                            "
+    arr = args.fetch(:board).arr 
+ 
+    top = args.fetch(:top, (Curses.lines - arr.length) /2)
+    left = args.fetch(:left, (Curses.cols - arr.first.length) /2)
+    board_map = CursorMap.new(top: top, 
+                              left: left, 
+                              arr: arr, 
+                              content: board_str, 
+                              key: "X", 
+                              bg_map: bg_map, 
+                              fg_map: fg_map,
+                              empty_chr: "_")
+
+  end
+
+  def self.self_scrolling_feed(args)
+    h = args.fetch(:height)
+    w = args.fetch(:width)
+    t = args.fetch(:top)
+    l = args.fetch(:left)
+    lines = args.fetch(:lines, 10)
+
+    content_arr = args.fetch(:content) || []
+
+    self_scrolling_feed = List.new(height: h, 
+                                   width: w, 
+                                   content: content_arr,
+                                   top: t,
+                                   left: l,
+                                   lines: lines) 
+
+    return [self_scrolling_feed, content_arr]
+  end
+
+  def self.game_screen(args = {})
+
+    h = args.fetch(:height, Curses.lines)
+    w = args.fetch(:width, Curses.cols)
+    t = args.fetch(:top, 0)
+    l = args.fetch(:left, 0)
+
+    game_screen = InteractiveScreen.new(height: h, 
+                                        width: w, 
+                                        top: t, 
+                                        left: l)
+
+    move_history_input = args.fetch(:move_history_input) || []
+    move_history_feed = self.self_scrolling_feed(height: 30,
+                                                 width: 15,
+                                                 top: 5,
+                                                 left: 5,
+                                                 content: move_history_input,
+                                                 lines: 15)
+    move_history_label = Window.new(top: 3,
+                                    left: 5,
+                                    content: "Move History")
+                                 
+    message_input = args.fetch(:message_input) || []
+    message_feed = self.self_scrolling_feed(height: 3, 
+                                            width: 50, 
+                                            top: 5,
+                                            left: 80,
+                                            content: message_input,
+                                            lines: 1)
+    
+    turn_display_input = args.fetch(:turn_display_input) || []
+    turn_display = self.self_scrolling_feed(height: 3,
+                                            width: 30,
+                                            top: 3,
+                                            left: 40,
+                                            content: turn_display_input,
+                                            lines: 1)
+
+    board = args.fetch(:board) || Board.new 
+    board_map = self.game_board(board: board,
+                                top: 5,
+                                left: 40)
+    
+    game_screen.add_region(board_map)
+    game_screen.add_region(move_history_feed[0])
+    game_screen.add_region(message_feed[0])
+    game_screen.add_region(move_history_label)
+    game_screen.add_region(turn_display[0])
+
+    return game_screen
+  end
+end
 
 def test_map
 
@@ -1309,14 +1413,14 @@ end
 def test_cursor_map
  
   test_str = "   a  b  c  d  e  f  g  h   \n" +
-             "1| X  X  X  X  X  X  X  X | \n" +
-             "2| X  X  X  X  X  X  X  X | \n" +
-             "3| X  X  X  X  X  X  X  X | \n" +
-             "4| X  X  X  X  X  X  X  X | \n" +
-             "5| X  X  X  X  X  X  X  X | \n" +
-             "6| X  X  X  X  X  X  X  X | \n" +
+             "8| X  X  X  X  X  X  X  X | \n" +
              "7| X  X  X  X  X  X  X  X | \n" +
-             "8| X  X  X  X  X  X  X  X | \n" + 
+             "6| X  X  X  X  X  X  X  X | \n" +
+             "5| X  X  X  X  X  X  X  X | \n" +
+             "4| X  X  X  X  X  X  X  X | \n" +
+             "3| X  X  X  X  X  X  X  X | \n" +
+             "2| X  X  X  X  X  X  X  X | \n" +
+             "1| X  X  X  X  X  X  X  X | \n" + 
              " -------------------------- \n"
    
   bg_map =     "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" +

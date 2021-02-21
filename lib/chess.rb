@@ -27,24 +27,51 @@ def start_game
   width = Curses.cols
   top = 0 
   left = 0 
-  game_screen = InteractiveScreen.new(height: height, width: width, top: top, left: left)
-  game_input_handler = InputHandler.new(in: game_screen)
+
+  #get_players
+  
   board = Board.new
-  board_map = get_board_map(board)
-  game_screen.add_region(board_map)
+  move_history_input = []
+  message_input = []
+  turn_display_input = []
+
+  game_screen = WindowTemplates.game_screen(height: height,
+                                            width: width,
+                                            top: 0,
+                                            left: 0,
+                                            move_history_input: move_history_input,
+                                            message_input: message_input,
+                                            turn_display_input: turn_display_input,
+                                            board: board)
+
+  game_input_handler = InputHandler.new(in: game_screen)
+
   player_one = Player.new(input_handler: game_input_handler)
   player_two = Player.new(input_handler: game_input_handler)
 
   game = Game.new(players: [player_one, player_two],
                   board: board,
+                  move_history_input: move_history_input,
+                  message_input: message_input,
+                  turn_display_input: turn_display_input,
                   io: game_screen)
   game.start
+end
+
+def get_players
+  
 end
 
 def load_save
   info = "       Load Save       \n" +
          "You have a save to load\n" +
          "So you should load it. \n" 
+=begin
+  if File.exists?("saves.txt")
+    save_data = File.read("saves.txt")
+    save_obj = Save.from_json(save_data)
+  end
+=end
 
   pop_up(info)
 end
@@ -106,6 +133,29 @@ def start_menu
            border_side: "|")
 end
 
+def title_screen
+  #Get Chess ascii art from title.txt
+  title_file = File.open("title.txt")
+  title_image = title_file.readlines 
+  title_file.close
+
+  title_image << "v1.0"
+  title_image << "By Blair Guardia"
+
+  $game_debug += "#{title_image}" 
+  padding = 2
+  height = title_image.length + padding * 2
+  width = title_image[0].length + padding * 2
+  top = 3
+  left = (Curses.cols - width - padding * 2) / 2
+  Window.new(height: height,
+             width: width,
+             content: title_image,
+             padding: padding,
+             top: 3,
+             left: left) 
+end
+
 if __FILE__ == $0
 begin
   Curses.init_screen
@@ -114,8 +164,10 @@ begin
   h = Curses.lines
   w = Curses.cols
   screen = InteractiveScreen.new(height: h, width: w, top: 0, left: 0, fg: :white, bg: :red, bkgd: " ")
+
   
   #screen.set_bg(:white, :red, "A")
+  screen.add_region(title_screen)
   screen.add_region(start_menu)
   screen.update
   input_handler = InputHandler.new(in: screen)
@@ -129,7 +181,7 @@ ensure
   puts $game_debug
   #puts $window_debug
   #puts $board_debug
-  puts $pieces_debug
+  #puts $pieces_debug
   #puts $movement_debug
   #puts $chess_debug
 end

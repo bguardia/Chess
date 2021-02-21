@@ -12,13 +12,16 @@ class Game
  def initialize(args = {})
    @players = args.fetch(:players, false) || create_players
    @sets = args.fetch(:sets, false) || create_sets
+
+   #Serve as connections with UI for easy updating
+   @io_stream = args.fetch(:io)
    @board = args.fetch(:board, false) || Board.new 
+   @message_input = args.fetch(:message_input)
+   @move_history_input = args.fetch(:move_history_input)
+   @turn_display_input = args.fetch(:turn_display_input)
+   
    @gamestate = set_gamestate
    @current_player = nil
-   @io_stream = args.fetch(:io)
-   $game_debug += "Game initialized with the following variables:\n" +
-                  "@players: #{@players}\n@sets: #{@sets}\n@board:\n" +
-                  "#{@board}\n"
  end
 
  def create_players
@@ -36,30 +39,17 @@ class Game
   StateTree.new(pieces)
  end
 
- def set_up_messenger
-   @msg_arr = []
-   @messenger = List.new(height: 3, width: 30, content: @msg_arr, top: 5, left: 5, lines: 1)
-   @io_stream.add_region(@messenger)
- end
-
- def set_up_move_history
-   @move_history_arr = []
-   @move_history = List.new(height: 30, 
-                            width: 10, 
-                            content: @move_history_arr,
-                            top: 10,
-                            left: 5,
-                            lines: 15) 
-   @io_stream.add_region(@move_history)
+ def update_turn_display(current_player, turn)
+   @turn_display_input[0] =  "#{current_player.team.capitalize}'s Turn (#{turn})"
  end
 
  def update_move_history(move)
    note = ChessNotation.move_to_notation(move, @gamestate)
-   l = @move_history_arr.length
+   l = @move_history_input.length
    if @turn_num == l 
-     @move_history_arr[@turn_num - 1] += " #{note}"
+     @move_history_input[@turn_num - 1] += " #{note}"
    else
-     @move_history_arr << "#{@turn_num} #{note}"
+     @move_history_input << "#{@turn_num} #{note}"
    end
  end
 
@@ -75,13 +65,11 @@ class Game
  end
 
  def start
-   #set_up_board
-   set_up_messenger
-   set_up_move_history
    @players[0].team = "white"
    @players[1].team = "black"
    @current_player = @players[0]
-   
+  
+   #Pieces and Board observe changes in gamestate and update themselves accordingly 
    piece_observer = Observer.new(to_do: ->(state) { Piece.update_pieces(state) })
    board_observer = Observer.new(to_do: ->(state) { @board.update(state) })
    @gamestate.add_observer(piece_observer)
@@ -95,6 +83,7 @@ class Game
  def play
    game_over = false
    until game_over
+     update_turn_display(@current_player, @turn_num)
      @io_stream.update
      player_turn
      change_current_player
@@ -104,7 +93,7 @@ class Game
      end
    end
 
-   @msg_arr << "Checkmate. #{@current_player.team.capitalize} loses."
+   @message_input << "Checkmate. #{@current_player.team.capitalize} loses."
    @io_stream.update
    @io_stream.get_input
  end
@@ -126,7 +115,7 @@ class Game
      input = player.get_input({})
      move = to_move(input)
      valid_move = valid?(move)
-     @messenger.update
+     @io_stream.update
      break if valid_move
    end
 
@@ -199,7 +188,7 @@ class Game
    piece = move.get_piece
    
    unless piece
-     @msg_arr << "Not a valid move"
+     @message_input << "Not a valid move"
      return false
    end
 
@@ -207,20 +196,20 @@ class Game
    removed = @gamestate.get_piece_at(pos)
 
    unless piece.team == @current_player.team
-     @msg_arr << "You can only move pieces on your team (#{@current_player.team})."
+     @message_input << "You can only move pieces on your team (#{@current_player.team})."
      return false
    end
 
    #Must be a possible move of the piece
 
    unless piece.can_reach?(pos)
-     @msg_arr << "#{piece.to_s} cannot move there."
+     @message_input << "#{piece.to_s} cannot move there."
      return false
    end
 
    #Must not move to a square occupied by a friendly piece
    if removed && piece.team == removed.team
-     @msg_arr << "Destination is occupied by a friendly piece."
+     @message_input << "Destination is occupied by a friendly piece."
      return false
    end
 =begin
@@ -230,14 +219,14 @@ class Game
    check_after_move = @gamestate.in_check?(team: piece.team)
    @gamestate.undo
    if check_before_move && check_after_move
-     @msg_arr << "King is still in check."
+     @message_input << "King is still in check."
      return false
    elsif check_after_move
-     @msg_arr << "Move puts king in check."
+     @message_input << "Move puts king in check."
      return false
    end
 =end
-   @msg_arr << ""
+   @message_input << ""
    return true
  end
 
