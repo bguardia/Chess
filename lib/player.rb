@@ -1,8 +1,6 @@
-require 'json'
-require './lib/chess.rb'
+#require './lib/chess.rb'
 
-class Player
-
+class Player < Saveable
   attr_reader :name, :team
 
   def initialize(args = {})
@@ -11,11 +9,13 @@ class Player
     @input_handler = args.fetch(:input_handler)
   end
 
+=begin
   def to_json
     JSON.dump({ :class => Player,
                 :name => @name,
                 :team => @team })
   end
+=end
 
   def team=(team)
     @team = team
@@ -24,12 +24,14 @@ class Player
   def get_input(args)
     @input_handler.get_input(args)
   end
-
+=begin
   def self.from_json(json_str)
     data = JSON.load json_str
     data.transform_keys!(&:to_sym)
     Player.new(data)
   end
+=end
+
 end
 
 

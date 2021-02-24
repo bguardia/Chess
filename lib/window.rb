@@ -1137,6 +1137,46 @@ module WindowTemplates
 
   def self.pop_up(window)
     #initiates a window that disappears after receiving input
+    padding = 10
+
+    win = Window.new(content: str,
+                     padding: padding,
+                     centered: true,
+                     border_top: "-",
+                     border_side: "|")
+    win.update
+    input = win.get_input
+    win.close
+    return input
+  end
+
+  def self.interactive_pop_up(interactive_window)
+    input_handler = InputHandler.new(in: interactive_window)
+    interactive_window.update
+    input = input_handler.get_input
+    interactive_window.close
+    return input
+  end
+
+  def self.menu(args = {})
+    h = args.fetch(:height)
+    w = args.fetch(:width)
+    t = args.fetch(:top)
+    l = args.fetch(:left)
+    col1 = args.fetch(:col1, [:white, :black])
+    col2 = args.fetch(:col2, [:red, :yellow])
+    content = args.fetch(:content)
+    actions = args.fetch(:actions)
+
+    menu = Menu.new(height: h,
+                    width: w,
+                    top: t,
+                    left: l,
+                    content: content,
+                    actions: actions,
+                    col1: col1,
+                    col2: col2)
+    
   end
 
   def self.game_board(args = {})

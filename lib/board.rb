@@ -1,66 +1,6 @@
-#require 'chess'
+#require './lib/chess.rb'
 
 $board_debug = ""
-=begin
-module Gamestate
-
-  REMOVED = nil
-
-  def update 
-    prev_state = get_previous_state(0)
-    pieces = self.get_pieces
-    pieces_hash = {} 
-
-    #Check for pieces which have been removed from game since last state
-    prev_state.each_key do |key|
-      pieces_hash[key] = REMOVED unless pieces.find { |p| p.id == key.to_i }
-    end
-
-    #Check for pieces which have changed position since last state
-    pieces.each do |p|
-      p_arr = [p, get_coords(p)]
-      p_key = p.id.to_s
-      if prev_state[p_key] == p_arr
-        next
-      else
-        pieces_hash[p_key] = p_arr
-      end
-    end
-
-    #Add state to log
-    @log << pieces_hash 
-  end
-
-  def get_previous_state(n)
-    arr = @log[0..(@log.length - (n + 1))]
-    arr.reduce({}) do |sum, state|
-      sum.merge(state)
-    end
-  end
-
-  def revert_to_previous_state(n)
-    n.times { @log.pop }
-    state = get_previous_state(0)
-  end
-
-  def return_last_moved
-    $board_debug += "called return_last_moved.\n"
-    $board_debug += "@log.length = #{@log.length}\n"
-    log_str = ""
-    @log.last.each_pair do |key, val|
-      name = val.nil? ? "empty" : val[0].class
-      pos = val.nil? ? "none" : val[1]
-      log_str += "#{key} => #{name}, #{pos}\n"
-    end
-    $board_debug += "@log.last: #{log_str}\n"
-    @log.last.each_value do |val|
-      if val
-        return val[0]
-      end
-    end
-  end
-end
-=end
 
 class Board
   attr_reader :arr
@@ -162,21 +102,6 @@ class Board
     return board_copy
   end
 
-=begin
-   def get_previous_pos(piece)
-    $board_debug += "called get_previous_pos\n"
-    return nil if piece.nil?
-    prev_state = get_previous_state(1)
-    val = prev_state.fetch(piece.id.to_s, nil)
-    $board_debug += "val fetched from prev_state: #{val}\n"
-    if val
-      return val[1]
-    else
-      return nil
-    end 
-  end
-=end
-
   public
   def to_s
     
@@ -194,7 +119,7 @@ class Board
 
 end
 
-class Node
+class Node < Saveable
 
   def initialize(data = nil, parent = nil)
     @parent_node = parent
@@ -225,6 +150,33 @@ class Node
 
   def remove_child(child_node)
   end
+=begin
+  def to_json
+    child_nodes = @child_nodes.map do |node|
+      node.to_json
+    end
+
+    node_hash = { "data" => @data.to_json,
+                  "child_nodes" => child_nodes }
+    
+    return node_hash.to_json
+  end
+=end
+
+  def self.from_json(json)
+    data = JSON.load json
+
+    node = self.new(data["data"])
+
+    queue = data["child_nodes"]
+    loop do
+      child_node_data = queue.pop
+      break unless child_node_data
+      node.add_child(self.from_json(child_node_data))
+    end
+
+    return node
+  end
 end
 
 module TreeSearch
@@ -254,13 +206,17 @@ module TreeSearch
   end
 end
 
-class StateTree
-
+class StateTree < Saveable
   attr_reader :current_node
 
-  def initialize(pieces)
-    @first_node = Node.new(State.new(pieces: pieces))
-    @current_node = @first_node
+  def initialize(args)
+    if args.fetch(:pieces)
+      @first_node = Node.new(State.new(args))
+      @current_node = @first_node
+    elsif args.fetch(:first_node)
+      @first_node = args.fetch(:first_node)
+      @current_node = args.fetch(:current_node)
+    end
     @observers = []
   end
 
@@ -416,6 +372,36 @@ class StateTree
     return checkmate
   end
 
+=begin
+  def to_json
+    JSON.dump({"first_node" => @first_node,
+               "last_move" => @current_node.last_move})
+  end
+
+  def self.from_json(json)
+    data = JSON.load json
+    
+    first_node = Node.from_json(data["first_node"])
+    last_move = Move.from_json(data["last_move"])
+
+    #Check node tree for node whose last_move matches
+    #Matching node is current_node
+    queue = [first_node]
+    current_node = nil
+    loop do
+      node = queue.pop
+      break if node.nil?
+      if node.last_move == last_move
+        current_node = node
+        break
+      end
+    end
+
+    return self.new(first_node: Node.from_json(data["first_node"]),
+                         current_node: current_node)
+  end
+=end
+
   def to_s
     queue = [@first_node]
     str = ""
@@ -438,11 +424,11 @@ class StateTree
 end
 
 
-class State
+class State < Saveable
 
   def initialize(args)
     @pieces = args.fetch(:pieces_hash, nil) || set_pieces(args.fetch(:pieces), true)
-    @positions = get_positions #inverse of positions and pieces
+    @positions = args.fetch(:positions, nil) || get_positions #inverse of positions and pieces
     @check = args.fetch(:check, nil) || { "white" => nil, "black" => nil }
     @checkmate = args.fetch(:checkmate, nil) || { "white" => nil, "black" => nil }
     @last_move = args.fetch(:last_move, nil)
@@ -680,6 +666,37 @@ class State
 
     return str
   end
+=begin
+  def to_json
+
+    pieces_hash = {}
+    @pieces.each_pair do |key, val|
+      key_json = key.to_json
+      pieces_hash[key_json] = val
+    end
+
+    state_hash = { "pieces" => pieces_hash,
+                   "last_move" => @last_move,
+                   "check" => @check,
+                   "checkmate" => @checkmate }
+
+    return state_hash.to_json
+  end
+
+  def self.from_json(json)
+    data = JSON.load json
+    
+    pieces_hash = {}
+    data["pieces"].each_pair do |key, val|
+      pieces_hash[Piece.from_json(key)] = val
+    end
+
+    return State.new(pieces_hash: pieces_hash,
+                     check: data["check"],
+                     checkmate: data["checkmate"],
+                     last_move: data["last_move"])
+  end
+=end
 
 end
 

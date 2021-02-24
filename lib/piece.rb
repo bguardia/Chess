@@ -1,5 +1,4 @@
-require './lib/chess.rb'
-require 'json'
+#require './lib/chess.rb'
 
 $pieces_debug = ""
 
@@ -75,7 +74,7 @@ module Pieces
 
 end
 
-class Piece
+class Piece < Saveable
 
   include Movement
 
@@ -91,11 +90,23 @@ class Piece
     @current_pos = @starting_pos 
     @icon = args.fetch(:icon, false) || get_icon
     @moved = args.fetch(:moved, false)
-    @id = @@next_piece_id
+    
     @possible_moves = []
     @blocked_moves = []
-    @@next_piece_id += 1
+
+    set_id(args)
+
     @@pieces << self
+  end
+
+  def set_id(args)
+    id = args.fetch(:id, false)
+    if id
+      @id = id
+    else
+      @id = @@next_piece_id
+      @@next_piece_id += 1
+    end
   end
 
   def set_pos(pos)
@@ -141,35 +152,33 @@ class Piece
   def white_icon; end
   def black_icon; end
 
+=begin
   def to_json
     JSON.dump({ :class => self.class,
-                :icon => @icon,
+                :starting_pos => @starting_pos,
                 :team => @team,
-                :current_pos => @current_pos,
-                :moved => @moved })
+                :id => @id })
   end
 
   def self.from_json(json_string)
     data = JSON.load json_string
     data.transform_keys!(&:to_sym)
-    Kernel.const_get(data[:class]).new(data)
+
+    #check if a piece with the same id already exists
+    existing_piece = @@pieces.find { |p| p.id == data["id"] }
+    if existing_piece
+      return existing_piece
+    else
+      return Kernel.const_get(data[:class]).new(data)
+    end
   end
+=end
 
   def self.create_observer
     Observer.new(to_do:->(state) { self.update_pieces(state) })
   end
 
   def self.update_pieces(state)
-=begin
-    @@pieces.each do |piece|
-      pos = state.get_pos(piece)
-      moves = state.get_moves(id: piece.id).flatten
-      moved = state.get_moved_status(piece)
-      piece.set_pos(pos)
-      piece.set_moves(moves)
-      piece.set_moved(moved)
-    end
-=end
     pieces = state.get_pieces
 
     pieces.each do |piece|

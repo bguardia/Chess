@@ -1,4 +1,4 @@
-require './lib/chess.rb'
+#require './lib/chess.rb'
 
 $movement_debug = ""
 
@@ -687,7 +687,7 @@ module Movement
   end
 end
 
-class Move
+class Move < Saveable
 
   def initialize(args = {})
     @instructions = prepare_arr(args.fetch(:move, nil)) # [ [piece, current_pos, next_pos] ] 
@@ -820,6 +820,32 @@ class Move
     end
 
     return nil
+  end
+
+  def to_json
+=begin
+    JSON.dump({ "instructions" => @instructions,
+                "attributes" => @attributes,
+                "turn" => @turn })
+=end
+  nil
+  end
+
+  def to_h
+    nil
+  end
+
+  def self.from_json(json)
+    data = JSON.load json
+    instructions = data["instructions"].map do |arr|
+      [Piece.from_json(arr[0]), arr[1], arr[2]]
+    end
+
+    attributes = data["attributes"].transform_keys(&:to_sym)
+
+    Move.new(move: instructions,
+             attr: attributes,
+             team: turn)
   end
 
   def to_s

@@ -1,11 +1,8 @@
-require './lib/chess.rb'
-require './lib/piece.rb'
-require './lib/player.rb'
-require 'json'
+#require './lib/chess.rb'
 
 $game_debug = ""
 
-class Game
+class Game < Saveable
 
  attr_reader :players, :board, :sets 
 
@@ -20,8 +17,8 @@ class Game
    @move_history_input = args.fetch(:move_history_input)
    @turn_display_input = args.fetch(:turn_display_input)
    
-   @gamestate = set_gamestate
-   @current_player = nil
+   @gamestate = args.fetch(:gamestate, false) || set_gamestate
+   @current_player = args.fetch(:current_player, nil)
  end
 
  def create_players
@@ -36,7 +33,7 @@ class Game
   pieces = @sets.flatten
   $game_debug += "called set_gamestate\n"
   $game_debug += "pieces: \n#{pieces}"
-  StateTree.new(pieces)
+  StateTree.new(pieces: pieces)
  end
 
  def update_turn_display(current_player, turn)
@@ -51,12 +48,6 @@ class Game
    else
      @move_history_input << "#{@turn_num} #{note}"
    end
- end
-
- def to_json
-   JSON.dump({ :players => @players.map(&:to_json),
-                   :sets => @sets.map { |set| set.map(&:to_json) },
-                   :board => @board })
  end
 
  def game_over?
@@ -112,7 +103,7 @@ class Game
 
    #input loop
    loop do
-     input = player.get_input({})
+     input = player.get_input({ 's' => -> { save }})
      move = to_move(input)
      valid_move = valid?(move)
      @io_stream.update
@@ -212,20 +203,7 @@ class Game
      @message_input << "Destination is occupied by a friendly piece."
      return false
    end
-=begin
-   #Check for check
-   check_before_move = @gamestate.in_check?(team: piece.team)
-   @gamestate.do!(move)
-   check_after_move = @gamestate.in_check?(team: piece.team)
-   @gamestate.undo
-   if check_before_move && check_after_move
-     @message_input << "King is still in check."
-     return false
-   elsif check_after_move
-     @message_input << "Move puts king in check."
-     return false
-   end
-=end
+
    @message_input << ""
    return true
  end
@@ -235,6 +213,21 @@ class Game
    #dead positions
    #knight + king vs. king
    #
+ end
+
+=begin
+ def self.to_json
+   sets = @sets.map do |set|
+     set.map(&:to_json)
+   end
+
+   players = @players.map { |player| player.to_json }
+
+   JSON.dump({ "gamestate" => @gamestate.to_json,
+               "sets" => sets,
+               "players" => players,
+               "move_history_input" => @move_history_input #to restore record of previous moves when loaded
+               }) 
  end
 
  def self.from_json(json_str)
@@ -251,15 +244,18 @@ class Game
      end
    end
 
+   data["gamestate"] = Statetree.from_json(data["gamestate"])
    data.transform_keys!(&:to_sym)
 
    Game.new(data)
  end
+=end
 
  def save
-   f = File.new('save.txt', 'a')
+   f = File.new('my_save.txt', 'a')
    f.puts to_json
    f.close 
+   exit
  end
 
  def self.load(saved_game); end
