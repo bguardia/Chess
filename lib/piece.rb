@@ -217,7 +217,6 @@ class Piece < Saveable
 
   def add_to_board(board)
     board.place(self, self.starting_pos)
-    @board = board
   end
 
   def to_s

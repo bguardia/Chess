@@ -821,15 +821,14 @@ class Move < Saveable
 
     return nil
   end
-
-  def to_json
 =begin
+  def to_json
     JSON.dump({ "instructions" => @instructions,
                 "attributes" => @attributes,
                 "turn" => @turn })
-=end
   nil
   end
+=end
 
   def to_h
     nil

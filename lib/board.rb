@@ -150,18 +150,17 @@ class Node < Saveable
 
   def remove_child(child_node)
   end
+
+  def ignore_on_serialization
+    ["@parent_node"]
+  end
+
 =begin
   def to_json
-    child_nodes = @child_nodes.map do |node|
-      node.to_json
-    end
-
-    node_hash = { "data" => @data.to_json,
-                  "child_nodes" => child_nodes }
+    JSON.dump({ "data" => @data,
+                "child_nodes" => @child_nodes })
     
-    return node_hash.to_json
   end
-=end
 
   def self.from_json(json)
     data = JSON.load json
@@ -177,6 +176,8 @@ class Node < Saveable
 
     return node
   end
+=end
+
 end
 
 module TreeSearch

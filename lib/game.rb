@@ -4,11 +4,11 @@ $game_debug = ""
 
 class Game < Saveable
 
- attr_reader :players, :board, :sets 
+ attr_reader :players, :board #, :sets 
 
  def initialize(args = {})
    @players = args.fetch(:players, false) || create_players
-   @sets = args.fetch(:sets, false) || create_sets
+   #@sets = args.fetch(:sets, false) || create_sets
 
    #Serve as connections with UI for easy updating
    @io_stream = args.fetch(:io)
@@ -30,7 +30,7 @@ class Game < Saveable
  end
 
  def set_gamestate
-  pieces = @sets.flatten
+  pieces = create_sets.flatten
   $game_debug += "called set_gamestate\n"
   $game_debug += "pieces: \n#{pieces}"
   StateTree.new(pieces: pieces)

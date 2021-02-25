@@ -95,21 +95,49 @@ end
 
 class Saveable
 
+  @@saved_objects = {}
+  @@loaded_objects = {}
+
+  def saved_objects
+    @@saved_objects 
+  end
+
+  def loaded_objects
+    @@loaded_objects
+  end
+
+  #put names of instance variables to be ignored on serialization
+  def ignore_on_serialization
+    []
+  end
+
   def to_h
-    $game_debug += "Called #{self.class}.to_h\n"
-    instance_variables.map do |iv|
-      val = instance_variable_get(iv)
-      $game_debug += "instance_var: #{iv}, val: #{val.to_s[0..9]}\n"
-      [
-        iv.to_s[1..-1],
-        case val
-        when Saveable then val.to_h
-        when Array 
-          handle_array(val)
-        else val
+    if @@saved_objects.has_key?(self)
+      @@saved_objects[self]
+    else
+      $game_debug += "Called #{self.class}.to_h\n"
+      serialized = instance_variables.map do |iv|
+        unless ignore_on_serialization.include?(iv.to_s)
+          val = instance_variable_get(iv)
+          $game_debug += "instance_var: #{iv}, val: #{val.to_s[0..9]}\n"
+          [
+            iv.to_s[1..-1],
+            case val
+            when Saveable then val.to_h
+            when Array 
+              handle_array(val)
+            else val
+            end
+          ]
+        else
+          nil
         end
-      ]
-    end.to_h.merge({ "class" => self.class })
+      end.compact.to_h.merge({ "class" => self.class })
+
+      @@saved_objects[self] = serialized
+      $game_debug += "Leaving #{self.class}.to_h\n"
+      return serialized
+    end
   end
 
   def handle_array(arr)
@@ -122,8 +150,8 @@ class Saveable
     end
   end
 
-  def to_json
-    JSON.dump self.to_h
+  def to_json(options = {})
+    JSON.generate(self.to_h, options)
   end
 
   def self.from_json(json_str)
