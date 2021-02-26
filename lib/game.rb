@@ -9,22 +9,26 @@ class Game < Saveable
  def initialize(args = {})
    @players = args.fetch(:players, false) || create_players
    #@sets = args.fetch(:sets, false) || create_sets
-
-   #Serve as connections with UI for easy updating
-   @io_stream = args.fetch(:io_stream)
-   @board = args.fetch(:board, false) || Board.new 
-   @message_input = args.fetch(:message_input)
-   @move_history_input = args.fetch(:move_history_input)
-   @turn_display_input = args.fetch(:turn_display_input)
-   
    @gamestate = args.fetch(:gamestate, false) || set_gamestate
    @current_player = args.fetch(:current_player, nil)
+   @move_history = args.fetch(:move_history, [])
+   @turn_num = args.fetch(:turn_num, nil)
+   set_ui(args)
+ end
+
+ public
+ def set_ui(args)
+   @io_stream = args.fetch(:io_stream, nil)
+   @move_history_input = args.fetch(:move_history_input, nil)
+   @turn_display_input = args.fetch(:turn_display_input, nil)
+   @board = args.fetch(:board, nil) || Board.new
+   @message_input = args.fetch(:message_input, nil)
  end
 
  def create_players
    [ Player.new, Player.new ]
  end
-
+ 
  def create_sets
    [ Pieces.new_set("white"), Pieces.new_set("black") ]
  end
@@ -41,11 +45,24 @@ class Game < Saveable
  end
 
  def update_move_history(move)
+   #load move_history into input array if sizes don't match
+   if @move_history.length != @move_history_input.length
+     @move_history.each_index do |i|
+       if @move_history_input.length - 1 >= i
+         @move_history_input[i] = @move_history[i]
+       else
+         @move_history_input << @move_history[i]
+       end
+     end
+   end
+
    note = ChessNotation.move_to_notation(move, @gamestate)
    l = @move_history_input.length
    if @turn_num == l 
+     @move_history[@turn_num - 1] += " #{note}"
      @move_history_input[@turn_num - 1] += " #{note}"
    else
+     @move_history << "#{@turn_num} #{note}"
      @move_history_input << "#{@turn_num} #{note}"
    end
  end
@@ -67,7 +84,23 @@ class Game < Saveable
    @gamestate.add_observer(board_observer)
    @gamestate.notify_observers
 
-   @turn_num = 1
+   @players.each do |p|
+     p.set_input_handler(InputHandler.new(in: @io_stream))
+   end
+   @turn_num ||= 1
+
+   #load move_history into move_history_input (for loading games)
+   if @move_history.length != @move_history_input.length
+     @move_history.each_index do |i|
+       if @move_history_input.length - 1 >= i
+         @move_history_input[i] = @move_history[i]
+       else
+         @move_history_input << @move_history[i]
+       end
+     end
+   end
+
+
    play
  end
 
@@ -250,6 +283,14 @@ class Game < Saveable
    Game.new(data)
  end
 =end
+
+ def ignore_on_serialization
+   ["@io_stream",
+    "@board",
+    "@message_input",
+    "@move_history_input",
+    "@turn_display_input"]
+ end
 
  def save
    f = File.new('my_save.txt', 'a')

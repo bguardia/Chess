@@ -17,10 +17,14 @@ class Board
 
   public
   def update(state)
+    $game_debug += "Called board.update\n"
     @arr.each_index do |r|
       @arr[r].each_index do |f|
         piece = state.get_piece_at([r, f])
         @arr[r][f] = piece
+        if piece
+          $game_debug += "Piece at [#{r},#{f}] is #{piece.team} #{piece.class} (#{piece.id})\n" 
+        end
       end
     end 
   end
@@ -671,6 +675,10 @@ class State < Saveable
     str += "\n } \n"
 
     return str
+  end
+
+  def ignore_on_serialization
+    ["@positions"]
   end
 =begin
   def to_json

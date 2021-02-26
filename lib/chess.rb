@@ -24,13 +24,22 @@ def pop_up(str)
 end
 
 def start_game
+  #game_input_handler = InputHandler.new(in: game_screen)
+
+  player_one = Player.new #(input_handler: game_input_handler)
+  player_two = Player.new #(input_handler: game_input_handler)
+
+  game = Game.new(players: [player_one, player_two])
+  init_game_ui(game)
+  game.start
+end
+
+def init_game_ui(game)
   height = Curses.lines 
   width = Curses.cols
   top = 0 
   left = 0 
 
-  #get_players
-  
   board = Board.new
   move_history_input = []
   message_input = []
@@ -45,18 +54,13 @@ def start_game
                                             turn_display_input: turn_display_input,
                                             board: board)
 
-  game_input_handler = InputHandler.new(in: game_screen)
 
-  player_one = Player.new(input_handler: game_input_handler)
-  player_two = Player.new(input_handler: game_input_handler)
+  game.set_ui(board: board,
+              move_history_input: move_history_input,
+              message_input: message_input,
+              turn_display_input: turn_display_input,
+              io_stream: game_screen)
 
-  game = Game.new(players: [player_one, player_two],
-                  board: board,
-                  move_history_input: move_history_input,
-                  message_input: message_input,
-                  turn_display_input: turn_display_input,
-                  io_stream: game_screen)
-  game.start
 end
 
 def get_players
@@ -80,7 +84,8 @@ def load_save
  save_data = save.readlines[0]
  save.close
  game = Saveable.from_json(save_data)
- game.play
+ init_game_ui(game)
+ game.start
 end
 
 def quit_game

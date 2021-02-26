@@ -220,19 +220,24 @@ class Saveable
 
   def self.load(data)
     #$game_debug += "Called Saveable.load\n Data is:\n #{data}\n"
-
-    data.transform_values! do |val|
-      Saveable.load_delegate(val)
-    end.transform_keys!(&:to_sym)
- 
-    if data.has_key?(:class)
-      clz = Kernel.const_get(data[:class])
+    if @@loaded_objects.has_key?(data)
+      @@loaded_objects[data]
     else
-      clz = self.class
-    end
+      data.transform_values! do |val|
+        Saveable.load_delegate(val)
+      end.transform_keys!(&:to_sym)
+   
+      if data.has_key?(:class)
+        clz = Kernel.const_get(data[:class])
+      else
+        clz = self.class
+      end
 
-    loaded = clz.new(data)
-    #$game_debug += "Loaded object: \n #{loaded}\n"
+      loaded = clz.new(data)
+      @@loaded_objects[data] = loaded
+      return loaded
+      #$game_debug += "Loaded object: \n #{loaded}\n"
+    end
   end
 end
 

@@ -6,7 +6,7 @@ class Player < Saveable
   def initialize(args = {})
     @name = args.fetch(:name, "")
     @team = args.fetch(:team, "")
-    @input_handler = args.fetch(:input_handler)
+    @input_handler = args.fetch(:input_handler, nil)
   end
 
 =begin
@@ -19,6 +19,10 @@ class Player < Saveable
 
   def team=(team)
     @team = team
+  end
+
+  def set_input_handler(input_handler)
+    @input_handler = input_handler
   end
 
   def get_input(args)
