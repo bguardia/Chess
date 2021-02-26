@@ -55,7 +55,7 @@ def start_game
                   move_history_input: move_history_input,
                   message_input: message_input,
                   turn_display_input: turn_display_input,
-                  io: game_screen)
+                  io_stream: game_screen)
   game.start
 end
 
@@ -64,17 +64,23 @@ def get_players
 end
 
 def load_save
+=begin
   info = "       Load Save       \n" +
          "You have a save to load\n" +
          "So you should load it. \n" 
-=begin
   if File.exists?("saves.txt")
     save_data = File.read("saves.txt")
     save_obj = Save.from_json(save_data)
   end
-=end
 
   pop_up(info)
+=end
+
+ save = File.open("my_save.txt", "r")
+ save_data = save.readlines[0]
+ save.close
+ game = Saveable.from_json(save_data)
+ game.play
 end
 
 def quit_game
@@ -143,7 +149,6 @@ def title_screen
   title_image << "v1.0"
   title_image << "By Blair Guardia"
 
-  $game_debug += "#{title_image}" 
   padding = 2
   height = title_image.length + padding * 2
   width = title_image[0].length + padding * 2
@@ -181,7 +186,7 @@ ensure
   Curses.close_screen
   puts $game_debug
   #puts $window_debug
-  #puts $board_debug
+  puts $board_debug
   #puts $pieces_debug
   #puts $movement_debug
   #puts $chess_debug

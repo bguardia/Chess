@@ -121,10 +121,12 @@ end
 
 class Node < Saveable
 
-  def initialize(data = nil, parent = nil)
-    @parent_node = parent
-    @data = data
-    @child_nodes = []
+  def initialize(args)
+    @parent_node = args.fetch(:parent, nil)
+    @data = args.fetch(:data, nil)
+    @child_nodes = args.fetch(:child_nodes, [])
+    #if child nodes are passed during initialization, set parent of each node
+    @child_nodes.each { |n| n.set_parent(self) } 
   end
 
   def set_parent(parent)
@@ -211,10 +213,10 @@ class StateTree < Saveable
   attr_reader :current_node
 
   def initialize(args)
-    if args.fetch(:pieces)
-      @first_node = Node.new(State.new(args))
+    if args.fetch(:pieces, nil)
+      @first_node = Node.new(data: State.new(args))
       @current_node = @first_node
-    elsif args.fetch(:first_node)
+    elsif args.fetch(:first_node, nil)
       @first_node = args.fetch(:first_node)
       @current_node = args.fetch(:current_node)
     end
@@ -263,7 +265,7 @@ class StateTree < Saveable
 
   def new_state(move)
     new_state = @current_node.data.do(move)
-    new_node = Node.new(new_state)
+    new_node = Node.new(data: new_state)
     @current_node.add_child(new_node)
     return new_node 
   end
@@ -428,12 +430,15 @@ end
 class State < Saveable
 
   def initialize(args)
-    @pieces = args.fetch(:pieces_hash, nil) || set_pieces(args.fetch(:pieces), true)
+    pieces = args.fetch(:pieces)
+    
+    @pieces = pieces.kind_of?(Array) ? set_pieces(pieces, true) : pieces
     @positions = args.fetch(:positions, nil) || get_positions #inverse of positions and pieces
     @check = args.fetch(:check, nil) || { "white" => nil, "black" => nil }
     @checkmate = args.fetch(:checkmate, nil) || { "white" => nil, "black" => nil }
     @last_move = args.fetch(:last_move, nil)
 
+    $game_debug += "pieces: #{@pieces}\n"
     set_moves 
   end
 
@@ -516,7 +521,7 @@ class State < Saveable
     last_move = move
 
     #Return as new state
-    return State.new(pieces_hash: pieces_hash,
+    return State.new(pieces: pieces_hash,
                      check: check,
                      last_move: move)
   end

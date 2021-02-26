@@ -115,19 +115,14 @@ class Saveable
     if @@saved_objects.has_key?(self)
       @@saved_objects[self]
     else
-      $game_debug += "Called #{self.class}.to_h\n"
+      #$game_debug += "Called #{self.class}.to_h\n"
       serialized = instance_variables.map do |iv|
         unless ignore_on_serialization.include?(iv.to_s)
           val = instance_variable_get(iv)
-          $game_debug += "instance_var: #{iv}, val: #{val.to_s[0..9]}\n"
+          #$game_debug += "instance_var: #{iv}, val: #{val.to_s[0..9]}\n"
           [
             iv.to_s[1..-1],
-            case val
-            when Saveable then val.to_h
-            when Array 
-              handle_array(val)
-            else val
-            end
+            save_delegate(val)
           ]
         else
           nil
@@ -135,19 +130,81 @@ class Saveable
       end.compact.to_h.merge({ "class" => self.class })
 
       @@saved_objects[self] = serialized
-      $game_debug += "Leaving #{self.class}.to_h\n"
+      #$game_debug += "Leaving #{self.class}.to_h\n"
       return serialized
     end
   end
 
   def handle_array(arr)
+    arr.map do |val|
+      save_delegate(val)
+    end
+  end
+
+  def save_delegate(val)
+    case val
+    when Saveable then val.to_json
+    when Array then handle_array(val)
+    when Hash then handle_hash(val)
+    else val
+    end
+  end
+
+  def handle_hash(h)
+    h.transform_values! do |val|
+      save_delegate(val)
+    end
+
+    h.transform_keys! do |val|
+      save_delegate(val)
+    end
+
+    return h
+  end
+
+  def self.load_array(arr)
     arr.map do |e|
-      if e.kind_of?(Array)
-        handle_array(e)
+      Saveable.load_delegate(e)
+    end 
+  end 
+
+  def self.load_hash(h)
+    h.transform_values! do |val|
+      Saveable.load_delegate(val)
+    end
+
+    h.transform_keys! do |key|
+      new_key = Saveable.load_delegate(key)
+      if new_key.kind_of?(String) 
+        new_key.to_sym
       else
-        e.respond_to?(:to_h) ? e.to_h : e
+        new_key
       end
     end
+  end
+
+  def self.load_delegate(val)
+      case val
+      when Hash
+        if val.has_key?("class")
+          Saveable.load(val) #Create object from hash
+        else
+          Saveable.load_hash(val) #Iterate through hash
+        end
+      when Array then Saveable.load_array(val) #Iterate through Array
+      when String
+        if Saveable.is_json?(val)
+          Saveable.from_json(val) #load json string
+        else
+          val #load string
+        end
+      else val
+      end
+  end
+
+  def self.is_json?(str)
+    return false unless str.kind_of?(String)
+    return true if str[0] == "{" && str[-1] == "}"
   end
 
   def to_json(options = {})
@@ -155,11 +212,27 @@ class Saveable
   end
 
   def self.from_json(json_str)
+    #$game_debug += "Called Saveable.from_json\n"
     data = JSON.load json_str
+    #$game_debug += "Data is:\n #{data}\n"
+    Saveable.load(data) 
+  end
 
-    data.transform_keys!(&:to_sym)
-    
-    self.new(data)
+  def self.load(data)
+    #$game_debug += "Called Saveable.load\n Data is:\n #{data}\n"
+
+    data.transform_values! do |val|
+      Saveable.load_delegate(val)
+    end.transform_keys!(&:to_sym)
+ 
+    if data.has_key?(:class)
+      clz = Kernel.const_get(data[:class])
+    else
+      clz = self.class
+    end
+
+    loaded = clz.new(data)
+    #$game_debug += "Loaded object: \n #{loaded}\n"
   end
 end
 

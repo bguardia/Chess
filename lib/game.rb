@@ -11,7 +11,7 @@ class Game < Saveable
    #@sets = args.fetch(:sets, false) || create_sets
 
    #Serve as connections with UI for easy updating
-   @io_stream = args.fetch(:io)
+   @io_stream = args.fetch(:io_stream)
    @board = args.fetch(:board, false) || Board.new 
    @message_input = args.fetch(:message_input)
    @move_history_input = args.fetch(:move_history_input)
