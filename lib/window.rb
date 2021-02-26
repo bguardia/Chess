@@ -843,6 +843,10 @@ class Menu < List
     update
   end
 
+  def line_increment
+    @height/@num_lines
+  end
+
   def to_up
     if @pos_y - 1 >= 0
       @pos_y -= 1
@@ -862,7 +866,7 @@ class Menu < List
   end
 
   def get_line_color(line_num)
-    if line_num == @pos_y
+    if line_num == @pos_y * line_increment
       col = @selected_col
     else
       col = @unselected_col 
@@ -1167,11 +1171,12 @@ module WindowTemplates
     col2 = args.fetch(:col2, [:red, :yellow])
     content = args.fetch(:content)
     actions = args.fetch(:actions)
-
+    num_lines = args.fetch(:num_lines, nil) || h
     menu = Menu.new(height: h,
                     width: w,
                     top: t,
                     left: l,
+                    lines: num_lines,
                     content: content,
                     actions: actions,
                     col1: col1,

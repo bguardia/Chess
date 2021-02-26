@@ -89,6 +89,7 @@ def load_save
                                  width: 50,
                                  top: 5,
                                  left: 5,
+                                 num_lines: 5,
                                  content: content,
                                  actions: actions)
                                  
