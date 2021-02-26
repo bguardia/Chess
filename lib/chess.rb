@@ -69,23 +69,30 @@ end
 
 def load_save
 =begin
-  info = "       Load Save       \n" +
-         "You have a save to load\n" +
-         "So you should load it. \n" 
-  if File.exists?("saves.txt")
-    save_data = File.read("saves.txt")
-    save_obj = Save.from_json(save_data)
-  end
-
-  pop_up(info)
-=end
-
  save = File.open("my_save.txt", "r")
  save_data = save.readlines[0]
  save.close
  game = Saveable.from_json(save_data)
  init_game_ui(game)
  game.start
+=end
+
+ SaveHelper.load_saves
+ actions = []
+ content = []
+ SaveHelper.saves.each do |save|
+   content << save.to_s
+   actions << -> { init_game_ui(save.data); save.data.start }
+ end
+
+ load_menu = WindowTemplates.menu(height: 50,
+                                 width: 50,
+                                 top: 5,
+                                 left: 5,
+                                 content: content,
+                                 actions: actions)
+                                 
+ InputHandler.new(in: load_menu).get_input
 end
 
 def quit_game

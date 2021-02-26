@@ -248,42 +248,6 @@ class Game < Saveable
    #
  end
 
-=begin
- def self.to_json
-   sets = @sets.map do |set|
-     set.map(&:to_json)
-   end
-
-   players = @players.map { |player| player.to_json }
-
-   JSON.dump({ "gamestate" => @gamestate.to_json,
-               "sets" => sets,
-               "players" => players,
-               "move_history_input" => @move_history_input #to restore record of previous moves when loaded
-               }) 
- end
-
- def self.from_json(json_str)
-
-   data = JSON.load json_str
-
-   data["players"].map! do |player_str|
-     Player.from_json(player_str)
-   end
-
-   data["sets"].map! do |set|
-     set.map! do |piece_str|
-       Piece.from_json(piece_str)
-     end
-   end
-
-   data["gamestate"] = Statetree.from_json(data["gamestate"])
-   data.transform_keys!(&:to_sym)
-
-   Game.new(data)
- end
-=end
-
  def ignore_on_serialization
    ["@io_stream",
     "@board",
@@ -293,9 +257,18 @@ class Game < Saveable
  end
 
  def save
+=begin
    f = File.new('my_save.txt', 'a')
    f.puts to_json
    f.close 
+   exit
+=end
+   save_title = "#{@players[0].name} vs. #{@players[1].name}"
+   data = self.to_json
+   board_state = @board.to_s
+   SaveHelper.save(title: save_title,
+                   data: data,
+                   board_state: board_state)
    exit
  end
 

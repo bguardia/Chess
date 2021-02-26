@@ -1,98 +1,6 @@
 #require './lib/chess.rb'
 require 'json'
 
-class SaveHelper
-
-  def initialize
-    @file_loc = "./save.txt"
-    @save_file = nil
-    @saves = []
-  end
-
-  def load_save_file
-    return true if @save_file
-    if File.exists?(@file_loc)
-      @save_file = File.open(@file_loc, "a+")
-    end  
-  end
-
-  def close_save_file
-    if @save_file
-      @save_file.close
-    end
-  end
-
-  def load_saves
-    load_save_file
-    @save_file.each do |line|
-      @saves << Save.from_json(line)
-    end
-    close_save_file
-  end
-
-  def save(args)
-    save = Save.new(args)
-    load_save_file
-    @save_file.puts save.to_json
-    close_save_file
-  end
-
-  def to_s
-    str = ""
-    num = 1
-    @saves.each do |save|
-      str += "#{num}. #{save}"
-      num += 1
-    end
-
-    return str
-  end
-
-end
-
-class Save
-
-  def initialize(args)
-    @date = args.fetch(:date, false) || set_date
-    @board_state = args.fetch(:board_state)
-    @data = args.fetch(:data) 
-    @title = args.fetch(:title)
-  end
-
-  def set_date
-    time = Time.now
-    date_str = "#{time.year}/#{time.month}/#{time.day} #{time.hour}:#{time.min}:#{time.sec}"
-  end
-
-  def self.from_json(json)
-    data = JSON.load json
-    data.transform_keys!(&:to_sym)
-    self.new(data)
-  end
-
-  def to_json
-    JSON.dump({ "date" => @date,
-                "board_state" => @board_state,
-                "title" => @title,
-                "data" => @data })
-  end
-
-  def to_s
-    
-    str += "#{@board_state[0]}     #{@title}    \n" +
-           "#{@board_state[1]}     #{@date}       \n" +
-    @board_state[2..-1].each do |line|
-      str += "#{line}\n"
-    end
-
-    return str
-  end
-
-  def load
-    
-  end
-end
-
 class Saveable
 
   @@saved_objects = {}
@@ -240,4 +148,84 @@ class Saveable
     end
   end
 end
+
+module SaveHelper
+
+  @@file_loc = "./my_save.txt"
+  @@save_file = nil
+  @@saves = []
+
+  def self.saves
+    @@saves
+  end
+
+  def self.load_save_file
+    return true if @@save_file
+    @@save_file = File.open(@@file_loc, "a+")
+  end
+
+  def self.close_save_file
+    if @@save_file
+      @@save_file.close
+      @@save_file = nil
+    end
+  end
+
+  def self.load_saves
+    self.load_save_file
+    @@save_file.each do |line|
+      @@saves << Save.from_json(line)
+    end
+    self.close_save_file
+  end
+
+  def self.save(args)
+    save = Save.new(args)
+    self.load_save_file
+    @@save_file.puts save.to_json
+    self.close_save_file
+  end
+
+  def self.to_s
+    str = ""
+    num = 1
+    @@saves.each do |save|
+      str += "#{num}. #{save}"
+      num += 1
+    end
+
+    return str
+  end
+
+end
+
+class Save < Saveable
+
+  attr_reader :data
+
+  def initialize(args)
+    @date = args.fetch(:date, false) || set_date
+    @board_state = args.fetch(:board_state)
+    @data = args.fetch(:data) 
+    @title = args.fetch(:title)
+  end
+
+  def set_date
+    time = Time.now
+    date_str = "#{time.year}/#{time.month}/#{time.day} #{time.hour}:#{time.min}:#{time.sec}"
+  end
+
+  def to_s
+    board_arr = @board_state.split("\n")    
+    str = "#{board_arr[0]}     #{@title}    \n" +
+           "#{board_arr[1]}     #{@date}       \n" 
+    board_arr[2..-1].each do |line|
+      str += "#{line}\n"
+    end
+
+    return str
+  end
+
+end
+
 

@@ -197,7 +197,7 @@ module Movement
       @origin = board.get_pos(piece)
       @moves = []
       @modifiable_moves = [[0,0]]
-      $movement_debug += "MovementArray.new called. @piece: #{@piece.class}, @origin: #{@origin}\n"
+      #$movement_debug += "MovementArray.new called. @piece: #{@piece.class}, @origin: #{@origin}\n"
     end
 
     private
@@ -363,7 +363,7 @@ module Movement
       add_moves
       moves = @moves.map { |move| [move[0] + @origin[0], move[1] + @origin[1]] }
       
-      $movement_debug += "Spaces called. Calculated positions are: #{moves}\n"
+      #$movement_debug += "Spaces called. Calculated positions are: #{moves}\n"
 
       on_board = moves.filter do |pos|
         valid_r = pos[0] >= 0 && pos[0] <= 7
@@ -371,7 +371,7 @@ module Movement
         valid_r && valid_f
       end
 
-      $movement_debug += "Positions off board have been filtered. Now: #{on_board}\n"
+      #$movement_debug += "Positions off board have been filtered. Now: #{on_board}\n"
 
 =begin
       unless @piece.kind_of?(Knight)
@@ -387,11 +387,11 @@ module Movement
       #so set :pawn_cap to true for diagonal movement
       if @piece.kind_of?(Pawn)
         unless args.fetch(:pawn_cap, false)
-          $movement_debug += "Piece is a pawn and :pawn_cap is false. Filtering positions with pieces...\n"
+          #$movement_debug += "Piece is a pawn and :pawn_cap is false. Filtering positions with pieces...\n"
           on_board.filter! do |move|
             @board.get_piece_at(move).nil?
           end
-          $movement_debug += "Positions have been filtered. Remaining moves: #{on_board}\n"
+          #$movement_debug += "Positions have been filtered. Remaining moves: #{on_board}\n"
         end
       end
 
@@ -473,10 +473,10 @@ module Movement
     enemy_team = ["white", "black"].find { |t| t != p.team }
     enemy_pieces = state.get_pieces(team: enemy_team)
    
-    $game_debug += "Listing moves sent to validate_moves:\n"
-    moves.each do |mv|
-      $game_debug += "#{mv}\n"
-    end
+    #$game_debug += "Listing moves sent to validate_moves:\n"
+    #moves.each do |mv|
+      #$game_debug += "#{mv}\n"
+    #end
     
     #get moves that would reach king (blocked and unblocked)
     attacking_moves = []
@@ -502,10 +502,10 @@ module Movement
     unless attacking_moves.empty?
       #get spaces between king and attackers
       spaces_arr = []
-      $game_debug += "Attackers are: \n"
+      #$game_debug += "Attackers are: \n"
       attacking_moves.each do |atkmv|
         attacker = atkmv.get_piece
-        $game_debug += "#{attacker.team} #{attacker.class} (#{attacker.id})\n"
+        #$game_debug += "#{attacker.team} #{attacker.class} (#{attacker.id})\n"
         spaces_between = []
         unless attacker.kind_of?(Knight)
           spaces_between = get_spaces_between(king.current_pos, attacker.current_pos)
@@ -516,8 +516,8 @@ module Movement
      #get intersection of spaces (in case of multiple attackers 
      spaces = spaces_arr.reduce(spaces_arr[0]) { |a,b| a.intersection(b) }
      #check each move for matches (or escapes if king)
-     $game_debug += "\nSpaces to check are: #{spaces}\n"
-     $game_debug += "Checking moves that match the spaces given...\n"
+     #$game_debug += "\nSpaces to check are: #{spaces}\n"
+     #$game_debug += "Checking moves that match the spaces given...\n"
      moves.each do |mv|
        #$game_debug += "#{mv}\n"
        blocks = false
@@ -639,25 +639,25 @@ module Movement
   end
 
   def self.return_move(piece_pos, dest_pos, board)
-    $game_debug += "called Movement.return_move(#{piece_pos}, #{dest_pos}, board)\n"
+    #$game_debug += "called Movement.return_move(#{piece_pos}, #{dest_pos}, board)\n"
     piece = board.get_piece_at(piece_pos)
     return [EmptyMove.new] if piece.nil?
 
     moves = piece.possible_moves
 
-    $game_debug += "Piece is: #{piece.class} (#{piece.id})\n"
-    $game_debug += "Moves are:\n"
-    moves.each do |mv|
-      $game_debug += mv.to_s
-    end
+    #$game_debug += "Piece is: #{piece.class} (#{piece.id})\n"
+    #$game_debug += "Moves are:\n"
+    #moves.each do |mv|
+      #$game_debug += mv.to_s
+    #end
 
     #check for any moves matching given destination
     #and return first match
     possible_moves = []
     moves.each do |mv|
-      $game_debug += mv.to_s
+      #$game_debug += mv.to_s
       if mv.destination(piece) == dest_pos
-        $game_debug += "Move matched to #{dest_pos}\n"
+        #$game_debug += "Move matched to #{dest_pos}\n"
         possible_moves << mv
       end
     end

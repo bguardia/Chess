@@ -17,14 +17,11 @@ class Board
 
   public
   def update(state)
-    $game_debug += "Called board.update\n"
+    #$game_debug += "Called board.update\n"
     @arr.each_index do |r|
       @arr[r].each_index do |f|
         piece = state.get_piece_at([r, f])
         @arr[r][f] = piece
-        if piece
-          $game_debug += "Piece at [#{r},#{f}] is #{piece.team} #{piece.class} (#{piece.id})\n" 
-        end
       end
     end 
   end
@@ -244,21 +241,21 @@ class StateTree < Saveable
   end
 
   def do(move)
-    $game_debug += "called statetree.do\n"
-    $game_debug += "Checking if child node for move already exists...\n"
-    $game_debug += "#{move}\n"
+    #$game_debug += "called statetree.do\n"
+    #$game_debug += "Checking if child node for move already exists...\n"
+    #$game_debug += "#{move}\n"
     next_state = @current_node.child_nodes.find do |node|
       state = node.data
-      $game_debug += "child node is:\n #{state}\n"
-      $game_debug += "last move is: \n#{state.last_move}\n"
+      #$game_debug += "child node is:\n #{state}\n"
+      #$game_debug += "last move is: \n#{state.last_move}\n"
       state.last_move == move
     end
 
     if next_state
-      $game_debug += "Moves matched. Next state is: \n #{next_state}\n"
+      #$game_debug += "Moves matched. Next state is: \n #{next_state}\n"
       next_state
     else
-      $game_debug += "Move did not match any child nodes. Creating new state.\n"
+      #$game_debug += "Move did not match any child nodes. Creating new state.\n"
       new_state(move)
     end
   end
@@ -334,7 +331,7 @@ class StateTree < Saveable
   end
 
   def checkmate?(team)
-    $game_debug += "Called statetree.checkmate?\n"
+    #$game_debug += "Called statetree.checkmate?\n"
     #@current_node.data.checkmate?(team)
     state = @current_node.data
     return false unless in_check?(team: team)
@@ -442,7 +439,7 @@ class State < Saveable
     @checkmate = args.fetch(:checkmate, nil) || { "white" => nil, "black" => nil }
     @last_move = args.fetch(:last_move, nil)
 
-    $game_debug += "pieces: #{@pieces}\n"
+    #$game_debug += "pieces: #{@pieces}\n"
     set_moves 
   end
 
