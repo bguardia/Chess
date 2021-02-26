@@ -104,7 +104,7 @@ class Saveable
         if Saveable.is_json?(val)
           Saveable.from_json(val) #load json string
         else
-          val #load string
+          val
         end
       else val
       end
@@ -113,6 +113,7 @@ class Saveable
   def self.is_json?(str)
     return false unless str.kind_of?(String)
     return true if str[0] == "{" && str[-1] == "}"
+    return true if str[0] == "[" && str[-1] == "]"
   end
 
   def to_json(options = {})
