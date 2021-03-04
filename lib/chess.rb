@@ -84,16 +84,29 @@ def load_save
    content << save.to_s
    actions << -> { init_game_ui(save.data); save.data.start }
  end
-
+=begin
  load_menu = WindowTemplates.menu(height: 50,
                                  width: 50,
                                  top: 5,
                                  left: 5,
-                                 num_lines: 5,
+                                 lines: 5,
                                  content: content,
                                  actions: actions)
-                                 
+=end
+
+ load_menu = WindowTemplates.menu_two(height:35,
+                                      width: 55,
+                                      top: 5,
+                                      left: 5,
+                                      lines: 3,
+                                      item_padding: 1,
+                                      content: content,
+                                      actions: actions,
+                                      title: "Load Save")
+
+ load_menu.update
  InputHandler.new(in: load_menu).get_input
+
 end
 
 def quit_game
@@ -151,6 +164,7 @@ def start_menu
            col2: [:white, :cyan],
            border_top: "-",
            border_side: "|")
+  
 end
 
 def title_screen
@@ -182,10 +196,9 @@ begin
 
   h = Curses.lines
   w = Curses.cols
-  screen = InteractiveScreen.new(height: h, width: w, top: 0, left: 0, fg: :white, bg: :red, bkgd: " ")
+  screen = InteractiveScreen.new(height: h, width: w, top: 0, left: 0, fg: :white, bg: :black, bkgd: " ")
 
   
-  #screen.set_bg(:white, :red, "A")
   screen.add_region(title_screen)
   screen.add_region(start_menu)
   screen.update

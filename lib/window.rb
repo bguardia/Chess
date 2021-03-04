@@ -286,6 +286,22 @@ module InteractiveWindow
     true
   end
 
+  #If set to true, an InteractiveScreen will change to next active region
+  def lose_focus
+    @in_focus = false
+  end
+
+  def set_focus
+    @in_focus = true
+  end
+
+  def focus
+    @in_focus
+  end
+
+  def check_focus
+  end
+
   #Stores any special keys used by a paticular context
   #(Will be over-ridden by arguments passed to input_handler)
   def key_map
@@ -467,9 +483,11 @@ class Window
   end
 
   def create_win
+    $game_debug += "Called create_win\n"
     @border_win = Curses::Window.new(@height, @width, @top, @left)
     
     if border_top && border_side
+      $game_debug += "border_top is: #{border_top}, border_side is: #{border_side}\n"
       @border_win.box(border_side, border_top)
     end
     @border_win.refresh
@@ -486,7 +504,7 @@ class Window
   #Update methods for redrawing and refreshing windows
   #update calls border_win_update and win_update
   #to change how the window is updated, overwrite the win_update method
-  def border_win_update
+  def border_win_update 
     #fill_win(@border_win, @fg, @bg, @bkgd)
     col = Curses.color_pair(return_c_pair(@fg, @bg))
     y = 0
@@ -496,6 +514,9 @@ class Window
         @border_win.addstr( @bkgd * @width )
       end
       y += 1
+    end
+    if border_top && border_side
+      @border_win.box(border_side, border_top)
     end
     @border_win.refresh
   end
@@ -572,15 +593,26 @@ class InteractiveScreen < Screen
       @active_region = nil 
     elsif i.nil?
       @active_region = interactive.first
+      @active_region.set_focus
       @active_region.before_get_input
     else
       next_i = (i + 1) % l
       @active_region.post_get_input
       @active_region = interactive[next_i]
+      @active_region.set_focus
       @active_region.before_get_input
     end
 
+    $game_debug += "Active Region is now: #{@active_region.class}\n"
     return @active_region
+  end
+
+  def set_active_region(rgn)
+    if @regions.include?(rgn)
+      @active_region = rgn
+      rgn.set_focus
+      return true
+    end  
   end
 
   def update_input_environment
@@ -598,6 +630,13 @@ class InteractiveScreen < Screen
 
   def post_get_input
     active_region.post_get_input
+  end
+
+  def check_focus
+    if active_region.focus == false 
+      $game_debug += "Active region: #{active_region.class}.focus is false. Changing region.\n"
+      change_active_rgn
+    end
   end
 
   def get_input
@@ -815,7 +854,7 @@ class List < Window
       c_num = return_c_pair(c_pair[0], c_pair[1]) 
       col = Curses.color_pair(c_num)
       @win.attron(col)
-      @win.addstr(line.ljust(@width - @padding * 2))
+      @win.addstr(line.ljust(@width - @padding * 2, @bkgd))
       @win.attroff(col)
       y += @height/@num_lines
       break if y > @height
@@ -840,16 +879,20 @@ class Menu < List
     @pos_y = 0
     @selected_col = args.fetch(:col2, nil)
     @unselected_col = args.fetch(:col1, nil)
+    @item_padding = args.fetch(:item_padding, nil) || 0
+    $game_debug += "Menu contents (length: #{@content.length}) are: #{@content}\n"
     update
   end
 
   def line_increment
-    @height/@num_lines
+    @height/@num_lines + @item_padding
   end
 
   def to_up
     if @pos_y - 1 >= 0
       @pos_y -= 1
+    else
+      lose_focus
     end
     update
   end
@@ -857,6 +900,8 @@ class Menu < List
   def to_down
     if @pos_y + 1 <= @content.length - 1
       @pos_y += 1
+    else
+      lose_focus
     end
     update
   end 
@@ -866,7 +911,7 @@ class Menu < List
   end
 
   def get_line_color(line_num)
-    if line_num == @pos_y * line_increment
+    if @in_focus && line_num == @pos_y * line_increment
       col = @selected_col
     else
       col = @unselected_col 
@@ -879,6 +924,36 @@ class Menu < List
     active.call
   end
 
+  def win_update
+    #gets the last @num_lines lines of @content (or all if length < @num_lines)
+    y = 0
+    @win.erase
+    @content.each do |item|
+      line_arr = item.split("\n")
+      item_height = line_arr.length
+
+      @win.setpos(y,0)
+      c_pair = get_line_color(y)
+      c_num = return_c_pair(c_pair[0], c_pair[1]) 
+      col = Curses.color_pair(c_num)
+      @win.attron(col)
+      line_arr.each do |line|
+        @win.addstr(line.ljust(@width - @padding * 2, @bkgd))
+        y += 1
+        break if y >= @height
+      end
+      @win.attroff(col)
+
+      @item_padding.times do
+        @win.addstr("\n")
+        y += 1
+      end
+
+      break if y >= @height
+    end
+    @win.refresh
+  end
+
   def key_map
     { Keys::UP => -> { to_up },
       Keys::DOWN => -> { to_down },
@@ -886,6 +961,7 @@ class Menu < List
   end
 
   def before_get_input
+    update
     Curses.noecho
     Curses.curs_set(0)
     @win.keypad(true)
@@ -1137,6 +1213,68 @@ class CursorMap < Map
 
 end
 
+class Button < Window
+  include Highlighting
+  include InteractiveWindow
+
+  def post_initialize(args)
+    @col1 = args.fetch(:col1, nil)
+    @col2 = args.fetch(:col2, nil)
+    @highlighted = false
+    $game_debug += "Button initialized. @col1: #{@col1}, @col2: #{@col2}, @highlighted: #{@highlighted}\n"
+  end
+
+  def key_map
+    { Keys::ENTER => ->{ @break = true 
+                         $game_debug += "Pressed enter in button\n" },
+      Keys::UP => ->{ lose_focus
+                      update
+                      $game_debug += "Pressed up in button\n" },
+      Keys::DOWN => ->{ lose_focus
+                        update 
+                        $game_debug += "Pressed down in button\n" } }
+  end
+
+  def before_get_input
+    @highlighted = true
+    Curses.noecho
+    Curses.curs_set(0)
+    @win.keypad(true)
+    update
+  end
+
+  def get_input
+    @win.getch
+  end
+
+  def break_condition
+    @break
+  end
+
+  def post_get_input
+    @highlighted = false
+    @win.keypad(false)
+    Curses.curs_set(1)
+    update
+  end
+
+  def win_update
+    if @highlighted
+      c_pair = @col2
+    else
+      c_pair = @col1
+    end
+
+    @win.erase
+    c_num = return_c_pair(c_pair[0], c_pair[1]) 
+    col = Curses.color_pair(c_num)
+    @win.attron(col)
+    @win.addstr(@content)
+    @win.attroff(col)
+    @win.refresh
+  end
+end
+
 module WindowTemplates
 
   def self.pop_up(window)
@@ -1182,6 +1320,99 @@ module WindowTemplates
                     col1: col1,
                     col2: col2)
     
+  end
+
+  def self.menu_two(args = {})
+    win_h = args.fetch(:height)
+    win_w = args.fetch(:width)
+    win_t = args.fetch(:top)
+    win_l = args.fetch(:left)
+
+    col1 = args.fetch(:col1, [:white, :black])
+    col2 = args.fetch(:col2, [:red, :yellow])
+    content = args.fetch(:content)
+    actions = args.fetch(:actions)
+ 
+    padding = args.fetch(:padding, nil) || 1
+    padding_top = args.fetch(:padding_top, nil) || padding
+    padding_left = args.fetch(:padding_left, nil) || padding
+    padding_right = args.fetch(:padding_right, nil) || padding
+    padding_bottom = args.fetch(:padding_bottom, nil) || padding
+
+    menu_screen = InteractiveScreen.new(height: win_h,
+                                        width: win_w,
+                                        top: win_t,
+                                        left: win_l,
+                                        padding: padding,
+                                        border_top: "-",
+                                        border_side: "|")
+
+    $game_debug += "Created menu screen\n"
+    title_h = 3
+    title_w = win_w - (padding * 2)
+    title_t = win_t + padding_top
+    title_l = win_l + padding_left
+    title = args.fetch(:title, nil) || "Load Save"
+    title_padding = args.fetch(:title_padding, nil) || 1
+
+    menu_title = Window.new(height: title_h,
+                            width: title_w,
+                            top: title_t,
+                            left: title_l,
+                            content: title,
+                            padding: title_padding)
+
+    $game_debug += "Created menu title\n"
+
+    btn_title = args.fetch(:btn, nil) || "Cancel"
+    btn_h = 3
+    btn_w = win_w - (padding * 2)#btn_title.length
+    btn_t = win_t + win_h - btn_h + padding #bottom-aligned
+    btn_l = win_l + ((win_w - btn_w) / 2) + padding   #centered
+
+    btn_padding = args.fetch(:btn_padding, nil) || 1
+
+    menu_cancel_button =  Button.new(height: btn_h,
+                                     width: btn_w,
+                                     top: btn_t,
+                                     left: btn_l,
+                                     content: btn_title,
+                                     col1: col1,
+                                     col2: col2,
+                                     padding: btn_padding,
+                                     border_top: "-",
+                                     border_side: "|")
+
+    $game_debug += "Created menu button\n"
+
+    menu_h = win_h - btn_h - title_h
+    menu_w = win_w - (padding * 2)
+    menu_t = title_h + title_t
+    menu_l = win_l + padding_left
+    num_lines = args.fetch(:lines, nil) || menu_h
+    item_padding = args.fetch(:item_padding, nil)
+    menu = Menu.new(height: menu_h,
+                    width: menu_w,
+                    top: menu_t,
+                    left: menu_l,
+                    lines: num_lines,
+                    item_padding: item_padding,
+                    content: content,
+                    actions: actions,
+                    col1: col1,
+                    col2: col2)
+
+    $game_debug += "Created menu\n"
+
+    menu_screen.add_region(menu_title)
+    $game_debug += "Added title to menu screen\n"
+    menu_screen.add_region(menu_cancel_button)
+    $game_debug += "Added menu button to menu screen\n"
+    menu_screen.add_region(menu)
+    $game_debug += "Added menu to menu screen\n"
+
+    menu_screen.set_active_region(menu)
+    return menu_screen
   end
 
   def self.game_board(args = {})
@@ -1361,55 +1592,12 @@ end
 
 def test_screen
 begin
-    
-  test_str = "   a  b  c  d  e  f  g  h   \n" +
-             "1| X  X  X  X  X  X  X  X | \n" +
-             "2| X  X  X  X  X  X  X  X | \n" +
-             "3| X  X  X  X  X  X  X  X | \n" +
-             "4| X  X  X  X  X  X  X  X | \n" +
-             "5| X  X  X  X  X  X  X  X | \n" +
-             "6| X  X  X  X  X  X  X  X | \n" +
-             "7| X  X  X  X  X  X  X  X | \n" +
-             "8| X  X  X  X  X  X  X  X | \n" + 
-             " -------------------------- \n"
-   
-  bg_map =     "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" +
-             (("bbMMMWWWMMMWWWMMMWWWMMMWWWbb\n" +
-               "bbWWWMMMWWWMMMWWWMMMWWWMMMbb\n") * 4) +
-               "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
-
-  fg_map =     "  WWWMMMWWWMMMWWWMMMWWWMMM  \n" +
-             (("WW                          \n" +
-               "MM                          \n") * 4 ) +
-               "                            "
-  pieces = Pieces.new_set("white").concat(Pieces.new_set("black"))
-  board = Board.new
-  pieces.each { |p| p.add_to_board(board) }
-
-  arr = board.arr 
-
   Curses.init_screen
   Curses.start_color
-  screen = InteractiveScreen.new(height: 20, width: 40, top: 10, left: 10)
-
-  field = TypingField.new(height: 1, width: 18, top: 24, left: 12, fg: :magenta, bg: :white)
-  test_color_map = CursorMap.new(top: 12, left: 12, arr: arr, str: test_str, key: "X", bg_map: bg_map, fg_map: fg_map)
-  bg_map = bg_map.gsub("M", "C")
-  fg_map = fg_map.gsub("M", "C")
-  map_two = CursorMap.new(top: 12, left: 40, arr: arr, str: test_str, key: "X", bg_map: bg_map, fg_map: fg_map)
-
-  inputgetter = InputHandler.new(in:screen)
-
-  screen.add_region(field)
-  screen.add_region(map_two)
-  screen.add_region(test_color_map)
+  screen = InteractiveScreen.new(height: 20, width: 40, top: 10, left: 10, border_top: "-", border_side: "|")
   screen.update
-  
-
-  board.move(pieces.first, [3,3])
-  screen.update
-  returned_input = inputgetter.get_input
-ensure
+  gets
+  ensure
   Curses.close_screen
 end
 
@@ -1561,27 +1749,51 @@ begin
   Curses.init_screen
   Curses.start_color
 
-  h = 5
-  w = 20
+  h = 10
+  w = 25
   t = 12
   l = 12
-
   options = [ ["Start game", -> { my_game }],
               ["Check rules", -> {see_rules}],
               ["Load game", -> { load_game }],
               ["Quit", -> { quit }]]
 
+  content = ["Start game",
+             "Check rules",
+             "Load game",
+             "Quit"]
+  actions = [->{ my_game },
+             ->{ see_rules },
+             ->{ load_game }, 
+             ->{ quit }]
 
-  my_menu = Menu.new(height: h,
+  my_menu = WindowTemplates.menu_two(height: h,
                      width: w,
                      top: t,
                      left: l,
-                     options: options,
+                     content: content,
+                     actions: actions,
                      col1: [:white, :black],
-                     col2: [:red, :yellow])
+                     col2: [:red, :yellow],
+                     title: "Start Menu")
 
 
+  my_menu.update
   inputgetter = InputHandler.new(in: my_menu)
+
+=begin
+  screen = Window.new(height: 10,
+                      width: 10,
+                      content: "A Screen",
+                      border_top: "-",
+                      border_bottom: "|",
+                      top: 5,
+                      left: 5,
+                      padding: 2)
+
+  screen.update
+  gets.chomp
+=end
 
   inputgetter.get_input
 ensure
@@ -1593,6 +1805,6 @@ end
 
 if __FILE__ == $0
 
-  test_screen
+  test_menu
 
 end

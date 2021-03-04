@@ -65,6 +65,8 @@ class InputHandler
         @interactive.handle_unmapped_input(input)
       end
 
+      @interactive.check_focus
+
       break if break_condition
     end 
 

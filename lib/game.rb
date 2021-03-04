@@ -13,6 +13,7 @@ class Game < Saveable
    @current_player = args.fetch(:current_player, nil)
    @move_history = args.fetch(:move_history, [])
    @turn_num = args.fetch(:turn_num, nil)
+   @break_game_loop = false
    set_ui(args)
  end
 
@@ -67,6 +68,11 @@ class Game < Saveable
    end
  end
 
+ def break_game_loop
+   $game_debug += "Called break_game_loop\n"
+   @break_game_loop = true
+ end
+
  def game_over?
    $game_debug += "Called game_over? \n"
    return @gamestate.checkmate?(@current_player.team)
@@ -84,8 +90,9 @@ class Game < Saveable
    @gamestate.add_observer(board_observer)
    @gamestate.notify_observers
 
+   @input_handler = InputHandler.new(in: @io_stream)
    @players.each do |p|
-     p.set_input_handler(InputHandler.new(in: @io_stream))
+     p.set_input_handler(@input_handler)
    end
    @turn_num ||= 1
 
@@ -110,6 +117,8 @@ class Game < Saveable
      update_turn_display(@current_player, @turn_num)
      @io_stream.update
      player_turn
+     break if @break_game_loop
+     $game_debug += "play loop not broken\n"
      change_current_player
      game_over = game_over?
      if @current_player.team == "white"
@@ -117,9 +126,16 @@ class Game < Saveable
      end
    end
 
-   @message_input << "Checkmate. #{@current_player.team.capitalize} loses."
-   @io_stream.update
-   @io_stream.get_input
+   $game_debug += "Broke out of play loop\n"
+
+   unless @break_game_loop
+     @message_input << "Checkmate. #{@current_player.team.capitalize} loses."
+     @io_stream.update
+     @io_stream.get_input
+   else
+     $game_debug += "Broke game loop and closed io_stream\n"
+     @io_stream.close
+   end
  end
 
  def change_current_player
@@ -136,15 +152,18 @@ class Game < Saveable
 
    #input loop
    loop do
-     input = player.get_input({ 's' => -> { save }})
+     input = player.get_input({ 's' => -> { save; @input_handler.break }})
+     break if @break_game_loop
      move = to_move(input)
      valid_move = valid?(move)
      @io_stream.update
      break if valid_move
    end
 
-   @gamestate.do!(move)
-   update_move_history(move)
+   unless @break_game_loop
+     @gamestate.do!(move)
+     update_move_history(move)
+   end
  end
 
  def highlight_moves(piece, win)
@@ -253,7 +272,8 @@ class Game < Saveable
     "@board",
     "@message_input",
     "@move_history_input",
-    "@turn_display_input"]
+    "@turn_display_input",
+    "@break_game_loop"]
  end
 
  def save
@@ -269,7 +289,7 @@ class Game < Saveable
    SaveHelper.save(title: save_title,
                    data: data,
                    board_state: board_state)
-   exit
+   break_game_loop
  end
 
  def self.load(saved_game); end
