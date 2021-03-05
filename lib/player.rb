@@ -60,7 +60,12 @@ class InputHandler
       key_map = @key_map.merge(@interactive.key_map).merge(key_map_arg)
       input = @interactive.get_input 
       if key_map.has_key?(input)
-        key_map[input].call
+        if key_map[input].kind_of?(String) && @interactive.respond_to?(key_map[input])
+          action = @interactive.method(key_map[input])
+        else
+          action = key_map[input]
+        end
+         action.call
       else
         @interactive.handle_unmapped_input(input)
       end

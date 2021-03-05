@@ -575,13 +575,15 @@ class InteractiveScreen < Screen
   def post_post_initialize(args)
     @active_region = nil
     @break = false
+    @key_map = args.fetch(:key_map, nil) || { Keys::TAB =>-> { change_active_rgn },
+                                              Keys::ESCAPE => -> { @break = true }}
   end
 
   def interactive_rgns
     @regions.filter { |r| r.respond_to?(:interactive) }
   end
 
-  def change_active_rgn
+  def change_active_rgn(inc = 1)
     interactive = interactive_rgns
     l = interactive.length
     i = interactive.index(@active_region)
@@ -596,7 +598,7 @@ class InteractiveScreen < Screen
       @active_region.set_focus
       @active_region.before_get_input
     else
-      next_i = (i + 1) % l
+      next_i = (i + inc) % l
       @active_region.post_get_input
       @active_region = interactive[next_i]
       @active_region.set_focus
@@ -605,6 +607,14 @@ class InteractiveScreen < Screen
 
     $game_debug += "Active Region is now: #{@active_region.class}\n"
     return @active_region
+  end
+
+  def to_next
+    change_active_rgn
+  end
+
+  def to_previous
+    change_active_rgn(-1)
   end
 
   def set_active_region(rgn)
@@ -648,10 +658,9 @@ class InteractiveScreen < Screen
   end
 
   def key_map
-    map = { Keys::TAB =>-> { change_active_rgn },
-            Keys::ESCAPE => -> { @break = true }}
+    @key_map
     if active_region  
-      map.merge(active_region.key_map)
+      @key_map.merge(active_region.key_map)
     end 
   end
 
@@ -1322,6 +1331,69 @@ module WindowTemplates
     
   end
 
+  def self.button_set(args = {})
+    default_settings = { height: 5,
+                         width: 15,
+                         top: 0,
+                         left: 0,
+                         border_top: "-",
+                         border_side: "|",
+                         padding: 1,
+                         key_map: { Keys::LEFT => "to_previous" ,
+                                    Keys::RIGHT => "to_next" }}
+
+
+    args = default_settings.merge(args)
+
+
+=begin
+    win_h = args.fetch(:height, nil) || 5
+    win_w = args.fetch(:width, nil) || 10
+    win_t = args.fetch(:top, nil) || 5
+    win_l = args.fetch(:left, nil) || 5
+    border_top = args.fetch(:border_top, nil)
+    border_side = args.fetch(:border_side, nil)
+    padding = args.fetch(:padding, nil) || 1
+=end
+
+    btn_window = InteractiveScreen.new(args)
+    
+    win_w = args.fetch(:width)
+    win_t = args.fetch(:top)
+    win_l = args.fetch(:left)
+    padding = args.fetch(:padding)
+
+    button_arr = args.fetch(:buttons, nil) || []
+    num_btns = button_arr.length
+    btn_h = 3
+    btn_padding = 1
+    btn_str_len = button_arr.reduce(0) { |longest, arr| arr[0].length > longest ? arr[0].length : longest }
+    btn_border_len = 2
+    btn_w = btn_str_len + btn_padding + btn_border_len
+    btn_padding = (win_w - padding - (btn_w * num_btns)) / (num_btns + 1) #automatically rounds down
+    btn_t = win_t + padding
+
+    btn_count = 1
+    button_arr.each do |btn_arr|
+      btn_l = win_l + padding + (btn_padding + btn_w) * btn_count 
+      btn = Button.new(height: btn_h,
+                       width: btn_w,
+                       top: btn_t,
+                       left: btn_l,
+                       content: btn_arr[0],
+                       action: btn_arr[1],
+                       col1: [:white, :black],
+                       col2: [:red, :yellow],
+                       border_top: "-",
+                       border_side: "|")
+
+      btn_window.add_region(btn)
+      btn_count += 1
+    end
+
+    return btn_window
+  end
+
   def self.menu_two(args = {})
     win_h = args.fetch(:height)
     win_w = args.fetch(:width)
@@ -1748,7 +1820,7 @@ def test_menu
 begin
   Curses.init_screen
   Curses.start_color
-
+=begin
   h = 10
   w = 25
   t = 12
@@ -1781,20 +1853,21 @@ begin
   my_menu.update
   inputgetter = InputHandler.new(in: my_menu)
 
-=begin
-  screen = Window.new(height: 10,
-                      width: 10,
-                      content: "A Screen",
-                      border_top: "-",
-                      border_bottom: "|",
-                      top: 5,
-                      left: 5,
-                      padding: 2)
-
-  screen.update
-  gets.chomp
 =end
 
+  #inputgetter.get_input
+
+  btn_arr = [["Go Back", -> { puts "Pressed go back"; exit }],
+            ["Accept", -> { puts "Pressed accept"; exit }],
+            ["Next", -> { puts "Pressed Next"; exit }]]
+  btn_window = WindowTemplates.button_set(height: 7,
+                                          width: 35,
+                                          buttons: btn_arr,
+                                          top: 5,
+                                          left: 5)
+
+  btn_window.update
+  inputgetter = InputHandler.new(in: btn_window)
   inputgetter.get_input
 ensure
   Curses.close_screen
