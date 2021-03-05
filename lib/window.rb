@@ -1332,18 +1332,22 @@ module WindowTemplates
   end
 
   def self.button_set(args = {})
-    default_settings = { height: 5,
-                         width: 15,
-                         top: 0,
-                         left: 0,
-                         border_top: "-",
-                         border_side: "|",
-                         padding: 1,
-                         key_map: { Keys::LEFT => "to_previous" ,
-                                    Keys::RIGHT => "to_next" }}
+    default_window_settings = { height: 5,
+                                width: 15,
+                                top: 0,
+                                left: 0,
+                                border_top: "-",
+                                border_side: "|",
+                                padding: 1,
+                                padding_top: 1,
+                                padding_left: 1,
+                                padding_right: 1,
+                                padding_bottom: 1,
+                                key_map: { Keys::LEFT => "to_previous" ,
+                                           Keys::RIGHT => "to_next" }}
 
 
-    args = default_settings.merge(args)
+    args = default_window_settings.merge(args)
 
 
 =begin
@@ -1357,10 +1361,15 @@ module WindowTemplates
 =end
 
     btn_window = InteractiveScreen.new(args)
-    
+
+    win_h = args.fetch(:height)
     win_w = args.fetch(:width)
     win_t = args.fetch(:top)
     win_l = args.fetch(:left)
+    padding_left = args.fetch(:padding_left)
+    padding_right = args.fetch(:padding_right)
+    padding_top = args.fetch(:padding_top)
+    padding_bottom = args.fetch(:padding_bottom)
     padding = args.fetch(:padding)
 
     button_arr = args.fetch(:buttons, nil) || []
@@ -1370,16 +1379,18 @@ module WindowTemplates
     btn_str_len = button_arr.reduce(0) { |longest, arr| arr[0].length > longest ? arr[0].length : longest }
     btn_border_len = 2
     btn_w = btn_str_len + btn_padding + btn_border_len
-    btn_padding = (win_w - padding - (btn_w * num_btns)) / (num_btns + 1) #automatically rounds down
-    btn_t = win_t + padding
+    btn_padding_left = (win_w - (padding_left + padding_right) - (btn_w * num_btns)) / (num_btns + 1) #automatically rounds down
+    btn_padding_top = (win_h - (padding_top + padding_bottom) - btn_h) / 2
+    btn_t = win_t + padding_top + btn_padding_top
 
-    btn_count = 1
+    btn_count = 0
     button_arr.each do |btn_arr|
-      btn_l = win_l + padding + (btn_padding + btn_w) * btn_count 
+      btn_l = win_l + padding_left + (btn_padding_left * (btn_count + 1)) + btn_w * btn_count 
       btn = Button.new(height: btn_h,
                        width: btn_w,
                        top: btn_t,
                        left: btn_l,
+                       padding: btn_padding,
                        content: btn_arr[0],
                        action: btn_arr[1],
                        col1: [:white, :black],
@@ -1864,7 +1875,8 @@ begin
                                           width: 35,
                                           buttons: btn_arr,
                                           top: 5,
-                                          left: 5)
+                                          left: 5,
+                                          padding: 1)
 
   btn_window.update
   inputgetter = InputHandler.new(in: btn_window)
