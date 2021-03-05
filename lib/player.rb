@@ -61,7 +61,7 @@ class InputHandler
       input = @interactive.get_input 
       if key_map.has_key?(input)
         if key_map[input].kind_of?(String) && @interactive.respond_to?(key_map[input])
-          action = @interactive.method(key_map[input])
+          action = @interactive.get_action(key_map[input])
         else
           action = key_map[input]
         end

@@ -308,6 +308,10 @@ module InteractiveWindow
     {}
   end
 
+  def get_action(action_str)
+    method(action_str)
+  end
+
   #Called during InputHandler's get_input loop
   def before_get_input; end
   def post_get_input; end
@@ -651,6 +655,14 @@ class InteractiveScreen < Screen
 
   def get_input
     active_region.get_input
+  end
+
+  def get_action(action_str)
+    if @active_region.respond_to?(action_str)
+      @active_region.method(action_str)
+    else
+      method(action_str)
+    end
   end
 
   def break_condition
@@ -1230,11 +1242,12 @@ class Button < Window
     @col1 = args.fetch(:col1, nil)
     @col2 = args.fetch(:col2, nil)
     @highlighted = false
+    @action = args.fetch(:action, nil) || Proc.new { @break = true }
     $game_debug += "Button initialized. @col1: #{@col1}, @col2: #{@col2}, @highlighted: #{@highlighted}\n"
   end
 
   def key_map
-    { Keys::ENTER => ->{ @break = true 
+    { Keys::ENTER => ->{ @action.call
                          $game_debug += "Pressed enter in button\n" },
       Keys::UP => ->{ lose_focus
                       update
@@ -1329,6 +1342,76 @@ module WindowTemplates
                     col1: col1,
                     col2: col2)
     
+  end
+
+  def self.multipage_window(args = {})
+ 
+    #Create window
+    default_window_settings = { height: 30,
+                                width: 20,
+                                top: 0,
+                                left: 0,
+                                border_top: "-",
+                                border_side: "|",
+                                padding: 1,
+                                padding_left: 1,
+                                padding_right: 1,
+                                padding_top: 1,
+                                padding_bottom: 1 }
+
+    args = default_window_settings.merge(args)
+
+    screen = InteractiveScreen.new(args)
+
+
+    #Create title
+    title = args.fetch(:title, nil) || "Title"
+    title_win = Window.new(height: 3,
+                           width: screen.width - 2,
+                           padding: 1,
+                           top: screen.top + 1,
+                           left: screen.left + 1,
+                           content: title)
+
+    #Create pages
+    pages = args.fetch(:pages, nil) || []
+    current_page_index = 0
+    total_pages = pages.length
+
+    #page-turning logic
+    change_page = ->(inc, rollover = true){ 
+      if rollover
+        current_page_index = current_page_index + inc % total_pages
+      else
+        new_index = current_page_index + inc
+        current_page_index = new_index >= 0 && new_index < total_pages ? new_index : current_page_index
+      end
+      pages[current_page_index].update
+    }
+
+    to_next_page = -> { change_page.call(1, false) }
+    to_previous_page = -> { change_page.call(-1, false) }
+
+    #Create navigation buttons
+    button_arr = [["Back", to_previous_page],
+                  ["Close", nil],
+                  ["Next", to_next_page]]
+
+    btn_set_top = screen.top + screen.height - 5
+    button_set = self.button_set(buttons: button_arr,
+                                 width: screen.width,
+                                 top: btn_set_top,
+                                 left: screen.left)
+
+
+    #add title and buttons to screen
+    screen.add_region(title_win)
+    screen.add_region(button_set)
+
+    #display first page
+    pages[current_page_index].update
+
+    return screen
   end
 
   def self.button_set(args = {})
@@ -1828,9 +1911,6 @@ def quit
 end
 
 def test_menu
-begin
-  Curses.init_screen
-  Curses.start_color
 =begin
   h = 10
   w = 25
@@ -1881,15 +1961,54 @@ begin
   btn_window.update
   inputgetter = InputHandler.new(in: btn_window)
   inputgetter.get_input
-ensure
-  Curses.close_screen
+
 end
 
+def test_multipage_window
+
+  win_h = 30
+  win_w = 40
+  win_t = 5
+  win_l = 5
+
+  page_contents = ["This is the first page.\n It has a lot of great info. \n So read carefully.",
+                   "This is the second page.\n Wow! It works!. \n Let's keep reading,",
+                   "This is the third page.\n Are you impressed?\n There are more pages.",
+                   "This is the last page. \n Did you enjoy it?\n Great!"]
+
+  page_h = win_h - 10
+  page_w = win_w - 2
+  page_t = win_t + 3 + 1
+  page_l = win_l + 1
+  pages = []
+  page_contents.each do |content|
+    pages.push(Window.new(height: page_h,
+                          width: page_w,
+                          top: page_t,
+                          left: page_l,
+                          content: content))
+  end
+
+  mp_window = WindowTemplates.multipage_window(height: win_h,
+                                               width: win_w,
+                                               top: win_t,
+                                               left: win_l,
+                                               pages: pages)
+  mp_window.update
+  inputgetter = InputHandler.new(in: mp_window)
+  inputgetter.get_input
 end
 
 
 if __FILE__ == $0
 
-  test_menu
+  begin
+    Curses.init_screen
+    Curses.start_color
+
+    test_multipage_window
+  ensure
+    Curses.close_screen
+  end
 
 end
