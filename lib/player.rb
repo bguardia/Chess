@@ -3,8 +3,11 @@
 class Player < Saveable
   attr_reader :name, :team
 
+  @@num_players = 0
   def initialize(args = {})
-    @name = args.fetch(:name, "")
+    @@num_players += 1
+    @id = args.fetch(:id, nil) || @@num_players
+    @name = args.fetch(:name, nil) || "Player #{@id}"
     @team = args.fetch(:team, "")
     @input_handler = args.fetch(:input_handler, nil)
   end
