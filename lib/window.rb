@@ -305,7 +305,15 @@ module InteractiveWindow
   #Stores any special keys used by a paticular context
   #(Will be over-ridden by arguments passed to input_handler)
   def key_map
-    {}
+    @key_map ||= {}
+  end
+
+  def set_key_map(key_map)
+    @key_map = key_map
+  end
+
+  def merge_key_map(key_map)
+    @key_map = key_map.merge(key_map)
   end
 
   def get_action(action_str)
@@ -333,6 +341,10 @@ module InteractiveWindow
   def update_key_map; end
 
   #A way for window/io to return its input
+  def input_to_return=(val)
+    @input_to_return = val
+  end
+
   def return_input
     @input_to_return
   end
@@ -340,7 +352,7 @@ end
 
 class Window
   include Highlighting
-  attr_reader :win
+  attr_reader :win, :content
   
   def initialize(args)   
     @padding = args.fetch(:padding, 0)
@@ -579,12 +591,13 @@ class InteractiveScreen < Screen
   def post_post_initialize(args)
     @active_region = nil
     @break = false
-    @key_map = args.fetch(:key_map, nil) || { Keys::TAB =>-> { change_active_rgn },
-                                              Keys::ESCAPE => -> { @break = true }}
+    @key_map = default_key_map.merge(args.fetch(:key_map, {}))   
   end
 
-  def interactive_rgns
-    @regions.filter { |r| r.respond_to?(:interactive) }
+  def default_key_map
+    { Keys::TAB =>-> { change_active_rgn },
+      Keys::ESCAPE => -> { @break = true }}
+
   end
 
   def change_active_rgn(inc = 1)
@@ -611,6 +624,11 @@ class InteractiveScreen < Screen
 
     $game_debug += "Active Region is now: #{@active_region.class}\n"
     return @active_region
+  end
+
+  public
+  def interactive_rgns
+    @regions.filter { |r| r.respond_to?(:interactive) }
   end
 
   def to_next
@@ -665,8 +683,12 @@ class InteractiveScreen < Screen
     end
   end
 
+  def break
+    @break = true
+  end
+
   def break_condition
-    active_region.break_condition
+    @break || active_region.break_condition
   end
 
   def key_map
@@ -898,6 +920,7 @@ class Menu < List
   def post_post_initialize(args)
     @actions = args.fetch(:actions) #a 2D array containing a string to display and a lambda to call = ["Start Game", ->{ game_start}]
     @pos_y = 0
+    @break_on_select = args.fetch(:break_on_select, true) 
     @selected_col = args.fetch(:col2, nil)
     @unselected_col = args.fetch(:col1, nil)
     @item_padding = args.fetch(:item_padding, nil) || 0
@@ -940,7 +963,7 @@ class Menu < List
   end
 
   def select
-    @break = true
+    @break = true if @break_on_select
     @win.erase
     active.call
   end
@@ -982,10 +1005,12 @@ class Menu < List
   end
 
   def before_get_input
+    set_focus
     update
     Curses.noecho
     Curses.curs_set(0)
     @win.keypad(true)
+    @break = false
   end
 
   def get_input
@@ -1089,6 +1114,7 @@ class CursorMap < Map
     @pos_x = 0
     @pos_y = 0
     @stored_input = nil
+    @key_map = default_key_map.merge(args.fetch(:key_map, {}))
     $window_debug += "#{self.class}.post_initialize called."
   end
 
@@ -1106,7 +1132,7 @@ class CursorMap < Map
     update_cursor_pos
   end
 
-  def key_map
+  def default_key_map
     { Keys::UP => -> { to_up },
       Keys::DOWN => -> { to_down },
       Keys::LEFT => -> { to_left },
@@ -1243,11 +1269,12 @@ class Button < Window
     @col2 = args.fetch(:col2, nil)
     @highlighted = false
     @action = args.fetch(:action, nil) || Proc.new { @break = true }
+    @key_map = default_key_map.merge(args.fetch(:key_map, {}))
     $game_debug += "Button initialized. @col1: #{@col1}, @col2: #{@col2}, @highlighted: #{@highlighted}\n"
   end
 
-  def key_map
-    { Keys::ENTER => ->{ @action.call
+  def default_key_map
+    { Keys::ENTER => ->{ press 
                          $game_debug += "Pressed enter in button\n" },
       Keys::UP => ->{ lose_focus
                       update
@@ -1255,6 +1282,10 @@ class Button < Window
       Keys::DOWN => ->{ lose_focus
                         update 
                         $game_debug += "Pressed down in button\n" } }
+  end
+
+  def press
+    @action.call
   end
 
   def before_get_input
@@ -1429,22 +1460,11 @@ module WindowTemplates
                                 key_map: { Keys::LEFT => "to_previous" ,
                                            Keys::RIGHT => "to_next" }}
 
-
+    #Create Button Window
     args = default_window_settings.merge(args)
-
-
-=begin
-    win_h = args.fetch(:height, nil) || 5
-    win_w = args.fetch(:width, nil) || 10
-    win_t = args.fetch(:top, nil) || 5
-    win_l = args.fetch(:left, nil) || 5
-    border_top = args.fetch(:border_top, nil)
-    border_side = args.fetch(:border_side, nil)
-    padding = args.fetch(:padding, nil) || 1
-=end
-
     btn_window = InteractiveScreen.new(args)
 
+    #Collect window settings for button calculations
     win_h = args.fetch(:height)
     win_w = args.fetch(:width)
     win_t = args.fetch(:top)
@@ -1457,6 +1477,7 @@ module WindowTemplates
 
     button_arr = args.fetch(:buttons, nil) || []
     num_btns = button_arr.length
+
     btn_h = 3
     btn_padding = 1
     btn_str_len = button_arr.reduce(0) { |longest, arr| arr[0].length > longest ? arr[0].length : longest }
@@ -1466,6 +1487,8 @@ module WindowTemplates
     btn_padding_top = (win_h - (padding_top + padding_bottom) - btn_h) / 2
     btn_t = win_t + padding_top + btn_padding_top
 
+    btn_border_top = args.fetch(:btn_border_top, nil) || args.fetch(:border_top, nil)
+    btn_border_side = args.fetch(:btn_border_side, nil) || args.fetch(:border_side, nil)
     btn_count = 0
     button_arr.each do |btn_arr|
       btn_l = win_l + padding_left + (btn_padding_left * (btn_count + 1)) + btn_w * btn_count 
@@ -1478,8 +1501,8 @@ module WindowTemplates
                        action: btn_arr[1],
                        col1: [:white, :black],
                        col2: [:red, :yellow],
-                       border_top: "-",
-                       border_side: "|")
+                       border_top: btn_border_top,
+                       border_side: btn_border_side)
 
       btn_window.add_region(btn)
       btn_count += 1
@@ -1581,6 +1604,147 @@ module WindowTemplates
     return menu_screen
   end
 
+  def self.settings_menu(args = {})
+
+    default_window_settings = {height: 25,
+                               width: 35,
+                               top: 0,
+                               left: 0,
+                               col1: [:white, :black],
+                               col2: [:red, :yellow],
+                               border_top: "-",
+                               border_side: "|"}
+
+    args = default_window_settings.merge(args)
+
+    settings_window = InteractiveScreen.new(args)
+
+    settings = args.fetch(:settings)
+    current_settings = {}
+    settings.each_key do |key|
+      current_settings[key] = settings[key][:active]
+    end
+    new_settings = current_settings.dup
+    menu_contents = []
+    sub_menus = []
+    sub_menu_displays = []
+
+    #window settings
+    win_h = args.fetch(:height)
+    win_w = args.fetch(:width)
+    win_t = args.fetch(:top)
+    win_l = args.fetch(:left)
+    padding = args.fetch(:padding, nil) || 1
+    padding_left = args.fetch(:padding_left, nil) || padding
+    padding_right = args.fetch(:padding_right, nil) || padding
+    padding_top = args.fetch(:padding_top, nil) || padding
+    padding_bottom = args.fetch(:padding_bottom, nil) || padding
+
+    col1 = args.fetch(:col1)
+    col2 = args.fetch(:col2)
+
+    menu_padding = 2
+
+    #window title
+    title = args.fetch(:title, nil) || "Settings"
+    title_w = win_w - padding_left - padding_right
+    title_t = win_t + padding_top
+    title_l = win_l + padding_left
+    title_win = self.window_title(title: title,
+                                  width: title_w,
+                                  top: title_t,
+                                  left: title_l)
+
+    #Calculate sub_menu settings
+    key_length = settings.keys.reduce(0) { |l,k| k.length > l ? k.length : l } 
+    sub_l = win_l + padding_left + key_length + menu_padding
+    sub_t = title_t + title_win.height
+
+
+    #Create a menu for each set of options
+    settings.each_key do |key|
+      options = settings[key][:options]
+      menu_contents << key.to_s
+      currently_selected = [settings[key][:active]]
+      sub_menu_actions = options.map { |op| ->{ new_settings[key] = op; currently_selected[0] = op } }
+      sub_menu = Menu.new(height: options.length,
+                          width: 10,
+                          top: sub_t,
+                          left: sub_l,
+                          col1: col1,
+                          col2: col2,
+                          content: options,
+                          actions: sub_menu_actions)
+      
+      #Create window that displays currently selected item from sub-menu
+      sub_menu_displays << Window.new(height: 1,
+                                    width: 10,
+                                    top: sub_t,
+                                    left: sub_l,
+                                    content: currently_selected)
+
+      #sub_menu.merge_key_map({ Keys::ESCAPE => ->{sub_menu.lose_focus} })
+      sub_menus << sub_menu
+      #settings_window.add_region(sub_menu)
+      sub_t += 1
+    end
+    
+
+    #Create button set
+    btn_t = win_t + win_h - 5
+    btn_l = win_l + padding_left
+    btn_w = win_w - padding_left - padding_right
+    button_set = self.button_set(top: btn_t,
+                                 left: btn_l,
+                                 width: btn_w,
+                                 buttons: [["Save", ->{  settings_window.break; return new_settings }],
+                                           ["Cancel", ->{  settings_window.break; return current_settings }]])
+
+    button_set.set_key_map({ Keys::UP =>->{ button_set.lose_focus },
+                             Keys::LEFT =>->{ button_set.to_previous },
+                             Keys::RIGHT =>->{ button_set.to_next }})
+   
+    button_set.interactive_rgns.each do |rgn|
+      if rgn.content == "Save"
+        return_settings = new_settings
+      else
+        return_settings = current_settings
+      end
+        rgn.set_key_map({ Keys::ENTER =>->{ rgn.input_to_return = return_settings; settings_window.break }})
+    end
+
+    settings_window.add_region(button_set)
+
+    #Creat main menu
+
+    #create actions for main settings menu
+    #Pressing enter in main menu will put corresponding sub_menu in focus
+    actions = sub_menus.map do |sub_menu|
+      ->{ InputHandler.new(in: sub_menu).get_input; settings_window.update }
+    end
+
+    #Menu dimensions
+    menu_t = title_t + title_win.height
+    menu_l = win_l + padding_left
+    menu_h = win_h - title_win.height - button_set.height
+    menu_w = sub_l - win_l - padding_left #(Changed not to overlap sub_menu_displays; old on right:) win_w - padding_left - padding_right
+    menu = Menu.new(height: 3,
+                    width: menu_w,
+                    top: menu_t,
+                    left: menu_l,
+                    content: menu_contents, 
+                    actions: actions,
+                    col1: col1,
+                    col2: col2,
+                    break_on_select: false)
+
+    settings_window.add_region(menu)
+    sub_menu_displays.each { |win| settings_window.add_region(win) }
+    settings_window.set_active_region(menu)
+    return settings_window
+  end
+
+
   def self.game_board(args = {})
     board_str = "   a  b  c  d  e  f  g  h   \n" +
              "8| X  X  X  X  X  X  X  X | \n" +
@@ -1618,23 +1782,93 @@ module WindowTemplates
   end
 
   def self.self_scrolling_feed(args)
-    h = args.fetch(:height)
-    w = args.fetch(:width)
-    t = args.fetch(:top)
-    l = args.fetch(:left)
-    lines = args.fetch(:lines, 10)
+    content_arr = args.fetch(:content, nil) ? args.fetch(:content) : []
+    default_list_settings = { lines: 10,
+                              content: content_arr }
 
-    content_arr = args.fetch(:content) || []
-
-    self_scrolling_feed = List.new(height: h, 
-                                   width: w, 
-                                   content: content_arr,
-                                   top: t,
-                                   left: l,
-                                   lines: lines) 
+    args = default_list_settings.merge(args)
+    self_scrolling_feed = List.new(args) 
 
     return [self_scrolling_feed, content_arr]
   end
+
+  def self.window_title(args)
+
+    title = args.fetch(:title, nil) || "Window"
+    width = args.fetch(:width, nil) || 10
+    padding_left = padding_right = (width - title.length) / 2
+
+    default_title_settings = { height: 3,
+                               width: 10,
+                               padding_top: 1,
+                               padding_bottom: 1,
+                               padding_left: padding_left,
+                               padding_right: padding_right,
+                               content: title }
+
+    args = default_title_settings.merge(args)
+
+    return Window.new(args)
+
+  end
+
+  def self.confirmation_screen(args = {})
+    default_settings = { height: 10,
+                         border_top: "-",
+                         border_side: "|" }
+
+    args = default_settings.merge(args)
+    win_h = args.fetch(:height)
+    win_w = args.fetch(:width)
+    win_t = args.fetch(:top)
+    win_l = args.fetch(:left)
+    padding = args.fetch(:padding, nil) || 1
+    padding_left = args.fetch(:padding_left, nil) || padding
+    padding_right = args.fetch(:padding_right, nil) || padding
+    padding_top = args.fetch(:padding_top, nil) || padding
+    padding_bottom = args.fetch(:padding_bottom, nil) || padding
+
+    screen = InteractiveScreen.new(args)
+
+    button_set = self.button_set(args)
+    
+    title_h = 3
+    title_w = win_w - padding_right - padding_left
+    title_t = win_t + padding_top
+    title_l = win_l + padding_left
+
+    title = args.fetch(:title, nil) || "Window"
+    title_win = self.window_title(title: title,
+                                  width: title_w, 
+                                  top: title_t,
+                                  left: title_l)
+
+    btn_h = 5
+    buttons = args.fetch(:buttons, nil) || [["Cancel", nil], ["Confirm", nil]]
+
+    default_button_settings = { height: btn_h,
+                                width: win_w - padding * 2,
+                                top: win_t + win_h - btn_h,
+                                left: win_l + padding_left,
+                                buttons: buttons }
+
+    button_set = self.button_set(default_button_settings)
+
+    content = args.fetch(:content, nil) || ""
+    content_win = Window.new(height: win_h - title_h - btn_h - padding_top - padding_bottom,
+                             width: win_w - padding_left - padding_right,
+                             top: title_t + title_h,
+                             left: win_l + padding_left,
+                             content: content) 
+
+    screen.add_region(title_win)
+    screen.add_region(button_set)
+    screen.add_region(content_win)
+
+    return screen
+
+  end
+
 
   def self.game_screen(args = {})
 
@@ -1643,18 +1877,31 @@ module WindowTemplates
     t = args.fetch(:top, 0)
     l = args.fetch(:left, 0)
 
+    border_top = args.fetch(:border_top, nil) || "-"
+    border_side = args.fetch(:border_side, nil) || "|"
+
     game_screen = InteractiveScreen.new(height: h, 
                                         width: w, 
                                         top: t, 
                                         left: l)
 
+    game_title = args.fetch(:title, nil) || "Game"
+    game_title_display = Window.new(height: 3,
+                                    width: game_title.length,
+                                    left: 40,
+                                    top: 3,
+                                    content: game_title)
+                                   
     move_history_input = args.fetch(:move_history_input) || []
     move_history_feed = self.self_scrolling_feed(height: 30,
                                                  width: 15,
                                                  top: 5,
                                                  left: 5,
+                                                 padding: 1,
                                                  content: move_history_input,
-                                                 lines: 15)
+                                                 lines: 15,
+                                                 border_top: border_top, 
+                                                 border_side: border_side)
     move_history_label = Window.new(top: 3,
                                     left: 5,
                                     content: "Move History")
@@ -1670,8 +1917,8 @@ module WindowTemplates
     turn_display_input = args.fetch(:turn_display_input) || []
     turn_display = self.self_scrolling_feed(height: 3,
                                             width: 30,
-                                            top: 3,
-                                            left: 40,
+                                            top: 7,
+                                            left: 80,
                                             content: turn_display_input,
                                             lines: 1)
 
@@ -1680,6 +1927,7 @@ module WindowTemplates
                                 top: 5,
                                 left: 40)
     
+    game_screen.add_region(game_title_display)
     game_screen.add_region(board_map)
     game_screen.add_region(move_history_feed[0])
     game_screen.add_region(message_feed[0])
@@ -1999,6 +2247,55 @@ def test_multipage_window
   inputgetter.get_input
 end
 
+def test_settings_menu
+
+  h = 30
+  w = 40
+  t = 5
+  l = 5
+
+  title = "Settings"
+
+  settings = { background_color: { active: "black",
+                                   options: ["red", "yellow", "blue", "black", "green"] },
+               board_color: { active: "purple",
+                              options: ["red", "purple", "blue", "green", "yellow"] },
+               ai_difficulty: { active: "easy",
+                                options: ["easy", "normal", "hard", "insane"] }}
+  settings_menu = WindowTemplates.settings_menu(title: title,
+                                                height: h,
+                                                width: w,
+                                                top: 5,
+                                                left: 5,
+                                                settings: settings)
+
+  settings_menu.update
+
+  new_settings = InputHandler.new(in: settings_menu).get_input
+  $window_debug += "Settings returned from settings menu are: #{new_settings}\n"
+end
+
+def test_confirmation_screen
+
+  win_h = 30
+  win_w = 40
+  win_t = 5
+  win_l = 5
+
+  title = "Confirmation"
+  content = "Do you really want to quit the game?\nIt's so fun that you should probably never stop!"
+
+  confirm_window = WindowTemplates.confirmation_screen(height: win_h,
+                                                       width: win_w,
+                                                       top: win_t,
+                                                       left: win_l,
+                                                       title: title,
+                                                       content: content)
+
+  confirm_window.update
+  inputgetter = InputHandler.new(in: confirm_window)
+  inputgetter.get_input
+end
 
 if __FILE__ == $0
 
@@ -2006,9 +2303,10 @@ if __FILE__ == $0
     Curses.init_screen
     Curses.start_color
 
-    test_multipage_window
+    test_settings_menu
   ensure
     Curses.close_screen
+    puts $window_debug
   end
 
 end
