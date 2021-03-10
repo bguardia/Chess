@@ -247,7 +247,11 @@ def title_screen
              content: title_image,
              padding: padding,
              top: 3,
-             left: left) 
+             left: left,
+             bg: :black,
+             fg: :white,
+             border_top: "-",
+             border_side: "|") 
 end
 
 if __FILE__ == $0
@@ -261,9 +265,7 @@ begin
   Settings.load
 
   bkgd_color = Settings.get("bkgd_color").to_sym
-  $game_debug += "bkgd_color is: #{bkgd_color}\n"
   screen = InteractiveScreen.new(height: h, width: w, top: 0, left: 0, fg: :white, bg: bkgd_color, bkgd: " ")
-
   
   screen.add_region(title_screen)
   screen.add_region(start_menu)
