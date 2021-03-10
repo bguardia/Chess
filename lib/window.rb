@@ -1643,7 +1643,7 @@ module WindowTemplates
     col1 = args.fetch(:col1)
     col2 = args.fetch(:col2)
 
-    menu_padding = 2
+    menu_padding = 5
 
     #window title
     title = args.fetch(:title, nil) || "Settings"
@@ -1655,26 +1655,33 @@ module WindowTemplates
                                   top: title_t,
                                   left: title_l)
 
+    settings_window.add_region(title_win)
+
     #Calculate sub_menu settings
+
     key_length = settings.keys.reduce(0) { |l,k| k.length > l ? k.length : l } 
     sub_l = win_l + padding_left + key_length + menu_padding
     sub_t = title_t + title_win.height
-
+    sub_menu_padding = 1
 
     #Create a menu for each set of options
     settings.each_key do |key|
       options = settings[key][:options]
+      sub_w = options.reduce(0) { |w,k| k.length > w ? k.length : w } + sub_menu_padding * 2  #longest string + padding
       menu_contents << key.to_s
       currently_selected = [settings[key][:active]]
       sub_menu_actions = options.map { |op| ->{ new_settings[key] = op; currently_selected[0] = op } }
-      sub_menu = Menu.new(height: options.length,
-                          width: 10,
+      sub_menu = Menu.new(height: options.length + sub_menu_padding * 2,
+                          width: sub_w,
                           top: sub_t,
                           left: sub_l,
                           col1: col1,
                           col2: col2,
+                          padding: sub_menu_padding,
                           content: options,
-                          actions: sub_menu_actions)
+                          actions: sub_menu_actions,
+                          border_top: "-",
+                          border_side: "|")
       
       #Create window that displays currently selected item from sub-menu
       sub_menu_displays << Window.new(height: 1,
@@ -1745,27 +1752,56 @@ module WindowTemplates
   end
 
 
+  def self.game_board_bg_map(args = {})
+    bg_map =  "1111111111111111111111111111\n" +
+             (("1122233322233322233322233311\n" +
+               "1133322233322233322233322211\n") * 4) +
+               "1111111111111111111111111111\n"
+
+    color_char_hash = Highlighting::COLOR_CODES.invert
+    col1 = args.fetch(:col1, nil) || :black
+    col2 = args.fetch(:col2, nil) || :b_white
+    col3 = args.fetch(:col3, nil) || :b_magenta
+    char1 = color_char_hash[col1]
+    char2 = color_char_hash[col2]
+    char3 = color_char_hash[col3]
+
+    bg_map = bg_map.gsub(/[123]/, '1' => char1, '2' => char2, '3' => char3)
+  end
+
+  def self.game_board_fg_map(args = {})
+    fg_map = "  222333222333222333222333  \n" +
+             (("33                          \n" +
+               "22                          \n") * 4 ) +
+               "                            "
+
+    #color nums chosen to match bg_map
+    color_char_hash = Highlighting::COLOR_CODES.invert
+    col2 = args.fetch(:col2, nil) || :b_white
+    col3 = args.fetch(:col3, nil) || :b_magenta
+    char2 = color_char_hash[col2]
+    char3 = color_char_hash[col3]
+
+    fg_map = fg_map.gsub(/[23]/, '2' => char2, '3' => char3)
+  end
+
   def self.game_board(args = {})
     board_str = "   a  b  c  d  e  f  g  h   \n" +
-             "8| X  X  X  X  X  X  X  X | \n" +
-             "7| X  X  X  X  X  X  X  X | \n" +
-             "6| X  X  X  X  X  X  X  X | \n" +
-             "5| X  X  X  X  X  X  X  X | \n" +
-             "4| X  X  X  X  X  X  X  X | \n" +
-             "3| X  X  X  X  X  X  X  X | \n" +
-             "2| X  X  X  X  X  X  X  X | \n" +
-             "1| X  X  X  X  X  X  X  X | \n" + 
-             " -------------------------- \n"
-   
-    bg_map = "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" +
-             (("bbMMMWWWMMMWWWMMMWWWMMMWWWbb\n" +
-               "bbWWWMMMWWWMMMWWWMMMWWWMMMbb\n") * 4) +
-               "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
-
-    fg_map = "  WWWMMMWWWMMMWWWMMMWWWMMM  \n" +
-             (("WW                          \n" +
-               "MM                          \n") * 4 ) +
-               "                            "
+                "8| X  X  X  X  X  X  X  X | \n" +
+                "7| X  X  X  X  X  X  X  X | \n" +
+                "6| X  X  X  X  X  X  X  X | \n" +
+                "5| X  X  X  X  X  X  X  X | \n" +
+                "4| X  X  X  X  X  X  X  X | \n" +
+                "3| X  X  X  X  X  X  X  X | \n" +
+                "2| X  X  X  X  X  X  X  X | \n" +
+                "1| X  X  X  X  X  X  X  X | \n" + 
+                " -------------------------- \n"
+    
+    board_color = args.fetch(:board_color, nil) || :b_magenta
+    bg_map = self.game_board_bg_map(col3: board_color)
+    fg_map = self.game_board_fg_map(col3: board_color)
+    $game_debug += "bg_map is: #{bg_map}"
+    $game_debug += "fg_map is: #{fg_map}"
     arr = args.fetch(:board).arr 
  
     top = args.fetch(:top, (Curses.lines - arr.length) /2)
@@ -1922,10 +1958,12 @@ module WindowTemplates
                                             content: turn_display_input,
                                             lines: 1)
 
-    board = args.fetch(:board) || Board.new 
+    board = args.fetch(:board) || Board.new
+    board_color = args.fetch(:board_color, nil) || :b_magenta 
     board_map = self.game_board(board: board,
                                 top: 5,
-                                left: 40)
+                                left: 40,
+                                board_color: board_color)
     
     game_screen.add_region(game_title_display)
     game_screen.add_region(board_map)

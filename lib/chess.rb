@@ -9,6 +9,53 @@ require './lib/window.rb'
 
 $chess_debug = ""
 
+#Load and save settings that can be changed by user
+module Settings
+
+  @@file_loc = "settings.txt"
+ 
+  @@vars = {}
+
+  def self.default_vars
+    { "bkgd_color" => "black",
+      "board_color" => "b_magenta" }
+  end
+
+  def self.possible_vars
+    { "bkgd_color" => ["black", "red", "green", "yellow", "blue"],
+      "board_color" => ["red", "b_yellow", "green", "b_blue", "b_magenta", "b_cyan"] }
+  end
+
+  def self.load
+    f = File.open(@@file_loc, "r")
+    json_str = f.read
+    f.close
+    $game_debug += "json_str is #{json_str}\n"
+    @@vars = self.default_vars.merge(JSON.load(json_str))
+    var_class = @@vars.class
+    $game_debug += "@@vars is: #{@@vars}\n@@vars is a #{var_class}\n"
+    
+  end
+
+  def self.get(key)
+    @@vars[key]
+  end
+
+  def self.all
+    @@vars
+  end
+
+  def self.update(settings)
+    @@vars.merge!(settings)
+  end
+
+  def self.save
+    f = File.open(@@file_loc, "w")
+    f.puts JSON.dump(@@vars)
+    f.close
+  end
+end
+
 def pop_up(str)
   padding = 10
 
@@ -30,29 +77,33 @@ def start_game
   player_two = Player.new #(input_handler: game_input_handler)
 
   game = Game.new(players: [player_one, player_two])
-  init_game_ui(game)
+  init_game_ui(game, board_color: Settings.get("board_color").to_sym)
   game.start
 end
 
-def init_game_ui(game)
+def init_game_ui(game, args = {})
   height = Curses.lines 
   width = Curses.cols
   top = 0 
   left = 0 
 
   board = Board.new
+  board_color = args.fetch(:board_color, nil) || :b_magenta
   move_history_input = []
   message_input = []
   turn_display_input = []
 
+  title = "#{game.players[0].name} vs. #{game.players[1].name}"
   game_screen = WindowTemplates.game_screen(height: height,
                                             width: width,
                                             top: 0,
                                             left: 0,
+                                            title: title,
                                             move_history_input: move_history_input,
                                             message_input: message_input,
                                             turn_display_input: turn_display_input,
-                                            board: board)
+                                            board: board,
+                                            board_color: board_color)
 
 
   game.set_ui(board: board,
@@ -68,15 +119,6 @@ def get_players
 end
 
 def load_save
-=begin
- save = File.open("my_save.txt", "r")
- save_data = save.readlines[0]
- save.close
- game = Saveable.from_json(save_data)
- init_game_ui(game)
- game.start
-=end
-
  SaveHelper.load_saves
  actions = []
  content = []
@@ -84,15 +126,6 @@ def load_save
    content << save.to_s
    actions << -> { init_game_ui(save.data); save.data.start }
  end
-=begin
- load_menu = WindowTemplates.menu(height: 50,
-                                 width: 50,
-                                 top: 5,
-                                 left: 5,
-                                 lines: 5,
-                                 content: content,
-                                 actions: actions)
-=end
 
  load_menu = WindowTemplates.menu_two(height:35,
                                       width: 55,
@@ -110,15 +143,25 @@ def load_save
 end
 
 def quit_game
-  info =  " You are about to Quit! \n" +
-          "Are you sure that you wa\n" +
-          "nt to quit? [y/n]       \n" 
+  h = 15
+  w = 30
+  t = ( Curses.lines - h ) / 2
+  l = ( Curses.cols - w ) / 2
 
-  input = pop_up(info)
+  title = "Quit Game"
+  content = "Are you sure you'd like to quit the game?"
+  buttons = [["Yes", ->{ exit }], ["No", nil]]
 
-  if input == "y" || input == "Y"
-    exit
-  end
+  quit_confirm = WindowTemplates.confirmation_screen(height: 15,
+                                      width: 30,
+                                      top: t,
+                                      left: l,
+                                      padding: 2,
+                                      title: title,
+                                      content: content,
+                                      buttons: buttons)
+  quit_confirm.update
+  InputHandler.new(in: quit_confirm).get_input
 end
 
 def about_game
@@ -131,12 +174,27 @@ def about_game
 end
 
 def settings
-  info = "You want to change game\n" +
-         "settings? What, the ori\n" +
-         "ginal settings weren't \n" +
-         "good enough?           \n"
+ current_settings = Settings.all
+ possible_settings = Settings.possible_vars
+ 
+ settings_hash = {}
+ current_settings.each_key do |key|
+   settings_hash[key] = { :active => current_settings[key],
+                          :options => possible_settings[key] }
+ end
 
-  pop_up(info)
+ h = 25
+ w = 35
+ t = (Curses.lines - h) / 2
+ l = (Curses.cols - w) / 2
+ settings_menu = WindowTemplates.settings_menu(height: h,
+                                               width: w,
+                                               top: t,
+                                               left: l,
+                                               settings: settings_hash) 
+ settings_menu.update
+ new_settings = InputHandler.new(in: settings_menu).get_input
+ Settings.update(new_settings)
 end
 
 def start_menu
@@ -148,12 +206,15 @@ def start_menu
   content = ["Start game",
              "Load save",
              "Quit game",
-             "About the game"]
+             "About the game",
+             "Settings"]
 
   actions = [-> {start_game},
              -> {load_save},
              -> {quit_game},
-             -> {about_game}]
+             -> {about_game},
+             -> {settings}]
+
   Menu.new(height: h,
            width: w,
            padding: p,
@@ -196,7 +257,12 @@ begin
 
   h = Curses.lines
   w = Curses.cols
-  screen = InteractiveScreen.new(height: h, width: w, top: 0, left: 0, fg: :white, bg: :black, bkgd: " ")
+
+  Settings.load
+
+  bkgd_color = Settings.get("bkgd_color").to_sym
+  $game_debug += "bkgd_color is: #{bkgd_color}\n"
+  screen = InteractiveScreen.new(height: h, width: w, top: 0, left: 0, fg: :white, bg: bkgd_color, bkgd: " ")
 
   
   screen.add_region(title_screen)
@@ -209,10 +275,11 @@ begin
     screen.update
   end
 ensure
+  Settings.save
   Curses.close_screen
   puts $game_debug
   #puts $window_debug
-  puts $board_debug
+  #puts $board_debug
   #puts $pieces_debug
   #puts $movement_debug
   #puts $chess_debug
