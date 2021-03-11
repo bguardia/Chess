@@ -29,6 +29,7 @@ class Player < Saveable
   end
 
   def get_input(args)
+    key_map = args.fetch(:key_map, nil) || {}
     @input_handler.get_input(args)
   end
 =begin
@@ -41,7 +42,59 @@ class Player < Saveable
 
 end
 
+module ComputerAI
 
+  def return_move(args)
+    gamestate = args.fetch(:gamestate)
+    current_team = team = self.team
+    op_team = other_team(team)
+
+    current_state = nil
+    queue = [gamestate]
+    loop do
+      #Get current state
+      current_state = queue.pop
+      break if current_state.nil?
+      
+      
+      if current_state.checkmate?(team: op_team)
+        
+      else
+        current_state.get_moves(team: team)
+      end
+
+    end
+
+  end
+
+  def return_random_move(args)
+    gamestate = args.fetch(:gamestate)
+    possible_moves = gamestate.get_moves(team: self.team).filter { |m| m.get_attr(:invalid) == false }
+    prng = Random.new
+    rand_index = prng.rand(possible_moves.length)
+    return possible_moves[rand_index]
+  end
+
+  def get_shortest_branch(statetree, team, enemy)
+    #if statetree.checkmate(team: enemy?)
+    #  return true
+    #elsif statetree.checkmate
+    #end
+  end
+
+  def other_team(current_team)
+    ["white", "black"].find { |t| t != current_team }
+  end
+end
+
+
+class ComputerPlayer < Player
+  include ComputerAI
+  def get_input(args)
+    return return_random_move(args)
+  end
+
+end
 class InputHandler
 
   attr_reader :received_input

@@ -379,13 +379,13 @@ class Window
 
     @border_top = args.fetch(:border_top, nil)
     @border_side = args.fetch(:border_side, nil)
-
+=begin
     $window_debug += "Initializing #{self.class}:\n@height: #{@height}\n" +
                      "@width: #{@width}\n@top: #{@top}\n@left: #{@left}\n" +
                      "@padding: #{@padding}\n@padding_left: #{@padding_left}\n" +
                      "@padding_right: #{@padding_right}\n@padding_top: #{@padding_top}\n" +
                      "@padding_bottom: #{@padding_bottom}\n"
-
+=end
     @border_win = nil #encapsulating window with border + padding
     @win = create_win #window to handle output
 
@@ -1036,6 +1036,7 @@ class TypingField < Window
    @bg = args.fetch(:bg, nil) #colors should be passed as symbols used in Highlighting
    @fg = args.fetch(:fg, nil)
    @input_to_return = "" 
+   @content = ""
    @break = false
  end
 
@@ -1069,6 +1070,7 @@ class TypingField < Window
      @win.setpos(y, x)
      @win.delch
      @input_to_return = @input_to_return.slice(0, @input_to_return.length - 1)
+     @content = @input_to_return
      update
    end
  end
@@ -1094,6 +1096,7 @@ class TypingField < Window
    if @win.curx < @width -1
      @win.addch(input) 
      @input_to_return += input.to_s
+     @content = @input_to_return
    end
  end
 
@@ -1604,8 +1607,85 @@ module WindowTemplates
     return menu_screen
   end
 
-  def self.settings_menu(args = {})
+  def self.input_box(args = {})
+    padding = args.fetch(:padding, nil) || 1
+    default_window_settings = {height: 15,
+                               width: 35,
+                               top: 0,
+                               left: 0,
+                               padding: padding,
+                               padding_left: padding,
+                               padding_right: padding,
+                               padding_top: padding,
+                               padding_bottom: padding,
+                               col1: [:white, :black],
+                               col2: [:red, :yellow],
+                               border_top: "-", 
+                               border_side: "|" }
 
+    args = default_window_settings.merge(args)
+    screen = InteractiveScreen.new(args)
+
+    padding_left = args.fetch(:padding_left)
+    padding_right = args.fetch(:padding_right)
+    padding_top = args.fetch(:padding_top)
+    padding_bottom = args.fetch(:padding_bottom)
+
+    #title
+    title_w = screen.width - padding_left - padding_right
+    title_t = screen.top + padding_top
+    title_l = screen.left + padding_left
+    title = args.fetch(:title, nil) || "Input Box"
+    title_win = WindowTemplates.window_title(title: title,
+                                             width: title_w,
+                                             top: title_t,
+                                             left: title_l)
+    screen.add_region(title_win)
+    
+    #OK Button
+    btn_w = 6
+    btn_h = 5
+    btn_t = screen.top + screen.height - btn_h - padding_bottom
+    btn_l = screen.left + (screen.width - btn_w) / 2
+    button = Button.new(content: "OK",
+                        height: btn_h,
+                        width: btn_w,
+                        top: btn_t,
+                        left: btn_l,
+                        action: ->{},
+                        col1: [:white, :black],
+                        col2: [:red, :yellow])
+
+    screen.add_region(button)
+
+    #Field
+    field_t = title_t + title_win.height
+    field_l = screen.left + padding_left
+    field_w = screen.width - padding_left - padding_right - 2
+    field_h =  5 #screen.height - padding_top - padding_bottom - title_win.height - btn_h
+    field = TypingField.new(height: field_h,
+                            width: field_w,
+                            top: field_t,
+                            left: field_l,
+                            padding: 2,
+                            border_top: "-",
+                            border_side: "|",
+                            bg: :black,
+                            fg: :white)
+
+    field.merge_key_map({ Keys::DOWN =>->{ field.lose_focus}, 
+                          Keys::ENTER =>->{ field.lose_focus}})
+
+    button.set_key_map({ Keys::UP =>->{button.lose_focus},
+                         Keys::ENTER =>->{button.input_to_return = field.content
+                                          screen.break }})
+
+    screen.add_region(field)
+    screen.update
+    return screen
+  end
+
+  def self.settings_menu(args = {})
     default_window_settings = {height: 25,
                                width: 35,
                                top: 0,

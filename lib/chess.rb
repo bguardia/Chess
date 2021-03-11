@@ -10,6 +10,7 @@ require './lib/window.rb'
 $chess_debug = ""
 
 #Load and save settings that can be changed by user
+
 module Settings
 
   @@file_loc = "settings.txt"
@@ -70,15 +71,64 @@ def pop_up(str)
   return input
 end
 
-def start_game
+def start_game(args)
   #game_input_handler = InputHandler.new(in: game_screen)
 
+=begin
   player_one = Player.new #(input_handler: game_input_handler)
   player_two = Player.new #(input_handler: game_input_handler)
+=end
 
-  game = Game.new(players: [player_one, player_two])
-  init_game_ui(game, board_color: Settings.get("board_color").to_sym)
-  game.start
+  players = get_players(args)
+  unless players.nil?
+    game = Game.new(players: players) #[player_one, player_two])
+    init_game_ui(game, board_color: Settings.get("board_color").to_sym)
+    game.start
+  end
+end
+
+def get_players(args)
+
+  #Get number of live and computer players using menu
+  num_players = 0
+  num_comps = 0
+  content = ["Player vs. Player", "Player vs. Computer", "Computer vs. Computer"]
+  actions = [->{ num_players = 2 }, ->{ num_players = num_comps = 1 }, ->{ num_comps = 2 }]
+=begin
+  h = 15
+  w = 35
+  t = (Curses.lines - h) / 2
+  l = (Curses.cols - w) / 2
+=end  
+  who_plays_menu = WindowTemplates.menu_two(args.merge(title: "Choose who will play:",
+                                            content: content,
+                                            actions: actions))
+  who_plays_menu.update
+  InputHandler.new(in: who_plays_menu).get_input
+  
+  unless num_players == 0 && num_comps == 0 #don't create players if a selection isn't made
+    #Ask for player names using input boxes
+    create_box = ->(title){ WindowTemplates.input_box(args.merge(title: title)) }
+    n = 1
+    players = []
+    num_players.times do
+      win = create_box.call("Enter the name of Player (#{n}):")
+      player_name = InputHandler.new(in: win).get_input
+      players << Player.new(name: player_name)
+      n += 1
+    end
+
+    num_comps.times do 
+      win = create_box.call("Enter the name of Computer (#{n}:")
+      computer_name = InputHandler.new(in: win).get_input
+      players << ComputerPlayer.new(name: computer_name)
+      n += 1
+    end
+    
+    return players
+  end
+
+  return nil
 end
 
 def init_game_ui(game, args = {})
@@ -114,11 +164,7 @@ def init_game_ui(game, args = {})
 
 end
 
-def get_players
-  
-end
-
-def load_save
+def load_save(args)
  SaveHelper.load_saves
  actions = []
  content = []
@@ -126,7 +172,7 @@ def load_save
    content << save.to_s
    actions << -> { init_game_ui(save.data); save.data.start }
  end
-
+=begin
  load_menu = WindowTemplates.menu_two(height:35,
                                       width: 55,
                                       top: 5,
@@ -136,22 +182,33 @@ def load_save
                                       content: content,
                                       actions: actions,
                                       title: "Load Save")
+=end
 
+ load_menu = WindowTemplates.menu_two(args.merge(height: 35,
+                                                 width: 55,
+                                                 top: (Curses.lines - 35)/2,
+                                                 left: (Curses.cols - 55)/2,
+                                                 lines: 3, 
+                                                 content: content, 
+                                                 actions: actions, 
+                                                 title: "Load Save", 
+                                                 item_padding: 1))
  load_menu.update
  InputHandler.new(in: load_menu).get_input
 
 end
 
-def quit_game
+def quit_game(args)
+=begin
   h = 15
   w = 30
   t = ( Curses.lines - h ) / 2
   l = ( Curses.cols - w ) / 2
-
+=end
   title = "Quit Game"
   content = "Are you sure you'd like to quit the game?"
   buttons = [["Yes", ->{ exit }], ["No", nil]]
-
+=begin
   quit_confirm = WindowTemplates.confirmation_screen(height: 15,
                                       width: 30,
                                       top: t,
@@ -160,11 +217,13 @@ def quit_game
                                       title: title,
                                       content: content,
                                       buttons: buttons)
+=end  
+  quit_confirm = WindowTemplates.confirmation_screen(args.merge(title: title, content: content, buttons: buttons))
   quit_confirm.update
   InputHandler.new(in: quit_confirm).get_input
 end
 
-def about_game
+def about_game(args)
   info = " You want to learn about\n" +
          "This amazing game and th\n" +
          "amazing person that made\n" +
@@ -173,7 +232,7 @@ def about_game
   pop_up(info)
 end
 
-def settings
+def settings(args)
  current_settings = Settings.all
  possible_settings = Settings.possible_vars
  
@@ -182,39 +241,39 @@ def settings
    settings_hash[key] = { :active => current_settings[key],
                           :options => possible_settings[key] }
  end
-
+=begin
  h = 25
  w = 35
  t = (Curses.lines - h) / 2
  l = (Curses.cols - w) / 2
- settings_menu = WindowTemplates.settings_menu(height: h,
-                                               width: w,
-                                               top: t,
-                                               left: l,
-                                               settings: settings_hash) 
+=end 
+ settings_menu = WindowTemplates.settings_menu(args.merge(settings: settings_hash))
  settings_menu.update
  new_settings = InputHandler.new(in: settings_menu).get_input
  Settings.update(new_settings)
 end
 
-def start_menu
+def start_menu(args)
+=begin
   p = 2
   h = 15 + p * 2
   w = 40 + p * 2
   t = (Curses.lines - h) / 2
   l = (Curses.cols - w) / 2
+=end  
   content = ["Start game",
              "Load save",
              "Quit game",
              "About the game",
              "Settings"]
 
-  actions = [-> {start_game},
-             -> {load_save},
-             -> {quit_game},
-             -> {about_game},
-             -> {settings}]
+  actions = [-> {start_game(args)},
+             -> {load_save(args)},
+             -> {quit_game(args)},
+             -> {about_game(args)},
+             -> {settings(args)}]
 
+=begin
   Menu.new(height: h,
            width: w,
            padding: p,
@@ -225,7 +284,9 @@ def start_menu
            col2: [:white, :cyan],
            border_top: "-",
            border_side: "|")
-  
+=end
+
+  Menu.new(args.merge({content: content, actions: actions}))
 end
 
 def title_screen
@@ -234,7 +295,7 @@ def title_screen
   title_image = title_file.readlines 
   title_file.close
 
-  title_image << "v1.0"
+  title_image << "v0.7.0"
   title_image << "By Blair Guardia"
 
   padding = 2
@@ -264,11 +325,34 @@ begin
 
   Settings.load
 
+  pad = 2
+  def_h = 15 + pad * 2
+  def_w = 40 + pad * 2
+  def_t = (Curses.lines - def_h) / 2
+  def_l = (Curses.cols - def_w) / 2
+  col1 = [:white, Settings.get("bkgd_color").to_sym]
+  col2 = [:red, :yellow]
+  fg = col1[0]
+  bg = col1[1]
+
+  default_win_size = { :height => def_h,
+                       :width => def_w,
+                       :top => def_t,
+                       :left => def_l,
+                       :padding => pad,
+                       :col1 => col1,
+                       :col2 => col2,
+                       :fg => fg,
+                       :bg => bg,
+                       :border_top => "-",
+                       :border_side => "|"}
+
+
   bkgd_color = Settings.get("bkgd_color").to_sym
   screen = InteractiveScreen.new(height: h, width: w, top: 0, left: 0, fg: :white, bg: bkgd_color, bkgd: " ")
   
   screen.add_region(title_screen)
-  screen.add_region(start_menu)
+  screen.add_region(start_menu(default_win_size))
   screen.update
   input_handler = InputHandler.new(in: screen)
 
