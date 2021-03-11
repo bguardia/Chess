@@ -262,6 +262,7 @@ class StateTree < Saveable
 
   def do!(move)
     set_current_node(self.do(move))
+    prune
   end
 
   def new_state(move)
@@ -275,6 +276,13 @@ class StateTree < Saveable
     parent_node = @current_node.parent_node
     if parent_node
       set_current_node(parent_node)
+    end
+  end
+
+  def prune #remove any children from parent of current_node
+    parent_node = @current_node.parent_node
+    parent_node.child_nodes do |child_node|
+      parent_node.remove_child(child_node) unless child_node == @current_node
     end
   end
 
