@@ -530,6 +530,7 @@ module Movement
        else
         temp_state = state.do(mv).data
         king_escapes = !temp_state.in_check?(king: king)
+        #$game_debug += "Move:\n #{mv}\n king_escapes: #{king_escapes}\n"
        end
       #$game_debug += "blocks: #{blocks}, king_escapes: #{king_escapes}\n\n"
       mv.set_attr(:invalid, true) unless blocks || king_escapes
@@ -569,6 +570,15 @@ module Movement
     $game_debug += "#{t} #{p} (#{id}): #{prev_pos} -> #{pos}, invalid?: #{invalid}, obj_id: #{move.object_id}\n"
   end
 =end
+
+  #Check king moves for possible self-checks
+    moves.each do |mv|
+      if mv.get_piece == king
+       temp_state = state.do(mv).data
+       king_escapes = !temp_state.in_check?(king: king)
+       mv.set_attr(:invalid, true) unless king_escapes
+      end
+    end
 
   return moves
   end
