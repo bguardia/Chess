@@ -356,19 +356,51 @@ class StateTree < Saveable
     #get important spaces (spaces between king and attackers, and attacker positions)
     king_pos = state.get_pos(king)
     enemy_team = ["white", "black"].find { |t| t != king.team }
-    attackers = state.get_pieces(team: enemy_team).filter do |atk|
-      atk.possible_moves.any? do |mv|
+    attacking_moves = state.get_moves(team: enemy_team).filter do |mv|
         mv.include?(king_pos)
-      end
     end
 
+      #get spaces between king and attackers
+      spaces_arr = []
+      #$game_debug += "Attackers are: \n"
+      attacking_moves.each do |atkmv|
+        attacker = atkmv.get_piece
+        #$game_debug += "#{attacker.team} #{attacker.class} (#{attacker.id})\n"
+        spaces_between = []
+        unless attacker.kind_of?(Knight)
+          spaces_between = Movement.get_spaces_between(king.current_pos, attacker.current_pos)
+        end
+        spaces_between << attacker.current_pos
+        spaces_arr << spaces_between 
+     end
+     #get intersection of spaces (in case of multiple attackers 
+     important_spaces = spaces_arr.reduce(spaces_arr[0]) { |a,b| a.intersection(b) }
+
+=begin
     important_spaces = attackers.reduce([]) do |spaces, atk|
       atk_pos = state.get_pos(atk)
       spaces.concat(Movement.get_spaces_between(king_pos, atk_pos)).concat(atk_pos)
     end
+=end
 
-    ally_pieces = get_pieces(team: team)
-
+     ally_moves = get_moves(team: team)
+     checkmate = moves.any? do |mv|
+       #$game_debug += "#{mv}\n"
+       blocks = false
+       king_escapes = false
+       piece = mv.get_piece
+       unless piece.kind_of?(King)
+         blocks = spaces.any? do |space|
+           mv.destination(piece) == space
+         end
+       else
+        temp_state = state.do(mv).data
+        king_escapes = !temp_state.in_check?(king: king)
+        #$game_debug += "Move:\n #{mv}\n king_escapes: #{king_escapes}\n"
+       end
+       blocks || king_escapes
+     end
+=begin
     checkmate = ally_pieces.all? do |p|
       p_moves = p.possible_moves 
       p_moves.all? do |mv|
@@ -380,7 +412,7 @@ class StateTree < Saveable
         end
       end
     end
-
+=end
     return checkmate
   end
 
@@ -645,6 +677,8 @@ class State < Saveable
 
     #get important spaces (spaces between king and attackers, and attacker positions)
     king_pos = get_pos(king)
+
+  
     important_spaces = attackers.reduce([]) do |spaces, atk|
       atk_pos = get_pos(atk)
       spaces.concat(Movement.get_spaces_between(king_pos, atk_pos)).concat(atk_pos)
