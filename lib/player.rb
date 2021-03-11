@@ -30,7 +30,7 @@ class Player < Saveable
 
   def get_input(args)
     key_map = args.fetch(:key_map, nil) || {}
-    @input_handler.get_input(args)
+    @input_handler.get_input(key_map)
   end
 =begin
   def self.from_json(json_str)
