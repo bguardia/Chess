@@ -174,6 +174,7 @@ module SaveHelper
 
   def self.load_saves
     self.load_save_file
+    self.clear_saves
     @@save_file.each do |line|
       @@saves << Save.from_json(line)
     end
@@ -185,6 +186,10 @@ module SaveHelper
     self.load_save_file
     @@save_file.puts save.to_json
     self.close_save_file
+  end
+
+  def self.clear_saves
+    @@saves = []
   end
 
   def self.to_s
