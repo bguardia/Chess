@@ -384,13 +384,13 @@ class StateTree < Saveable
 =end
 
      ally_moves = get_moves(team: team)
-     checkmate = moves.any? do |mv|
+     checkmate = ally_moves.any? do |mv|
        #$game_debug += "#{mv}\n"
        blocks = false
        king_escapes = false
        piece = mv.get_piece
        unless piece.kind_of?(King)
-         blocks = spaces.any? do |space|
+         blocks = important_spaces.any? do |space|
            mv.destination(piece) == space
          end
        else
