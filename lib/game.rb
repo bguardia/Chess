@@ -152,7 +152,8 @@ class Game < Saveable
 
    #input loop
    loop do
-     input = player.get_input(key_map: { 's' => -> { save; @input_handler.break }},
+     input = player.get_input(key_map: { 's' => -> { save; @input_handler.break },
+                                         'q' => -> { @input_handler.break; break_game_loop }},
                               gamestate: @gamestate)
      break if @break_game_loop
      move = input.kind_of?(Move) ? input : to_move(input)

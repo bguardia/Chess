@@ -472,7 +472,8 @@ module Movement
     king = state.get_pieces(type: "King", team: p.team)[0]
     enemy_team = ["white", "black"].find { |t| t != p.team }
     enemy_pieces = state.get_pieces(team: enemy_team)
-   
+  
+    return [] if king.nil?
     #$game_debug += "Listing moves sent to validate_moves:\n"
     #moves.each do |mv|
       #$game_debug += "#{mv}\n"
@@ -505,7 +506,6 @@ module Movement
       #$game_debug += "Attackers are: \n"
       attacking_moves.each do |atkmv|
         attacker = atkmv.get_piece
-        #$game_debug += "#{attacker.team} #{attacker.class} (#{attacker.id})\n"
         spaces_between = []
         unless attacker.kind_of?(Knight)
           spaces_between = get_spaces_between(king.current_pos, attacker.current_pos)
@@ -528,7 +528,7 @@ module Movement
            mv.destination(piece) == space
          end
        else
-        temp_state = state.do(mv).data
+        temp_state = state.do(mv)
         king_escapes = !temp_state.in_check?(king: king)
         #$game_debug += "Move:\n #{mv}\n king_escapes: #{king_escapes}\n"
        end
@@ -574,7 +574,7 @@ module Movement
   #Check king moves for possible self-checks
     moves.each do |mv|
       if mv.get_piece == king
-       temp_state = state.do(mv).data
+       temp_state = state.do(mv)
        king_escapes = !temp_state.in_check?(king: king)
        mv.set_attr(:invalid, true) unless king_escapes
       end

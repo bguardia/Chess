@@ -226,7 +226,6 @@ class StateTree < Saveable
 
   def set_current_node(node)
     @current_node = node
-    notify_observers
   end
 
   def add_observer(o)
@@ -241,6 +240,13 @@ class StateTree < Saveable
   end
 
   def do(move)
+    next_node = get_next_state(move)
+    statetree_copy = self.dup
+    statetree_copy.set_current_node(next_node)
+    return statetree_copy
+  end
+
+  def get_next_state(move)
     #$game_debug += "called statetree.do\n"
     #$game_debug += "Checking if child node for move already exists...\n"
     #$game_debug += "#{move}\n"
@@ -261,7 +267,9 @@ class StateTree < Saveable
   end
 
   def do!(move)
-    set_current_node(self.do(move))
+    next_node = get_next_state(move)
+    set_current_node(next_node)
+    notify_observers
     prune
   end
 
@@ -375,7 +383,6 @@ class StateTree < Saveable
      end
      #get intersection of spaces (in case of multiple attackers 
      important_spaces = spaces_arr.reduce(spaces_arr[0]) { |a,b| a.intersection(b) }
-
 =begin
     important_spaces = attackers.reduce([]) do |spaces, atk|
       atk_pos = state.get_pos(atk)
@@ -384,17 +391,17 @@ class StateTree < Saveable
 =end
 
      ally_moves = get_moves(team: team)
-     checkmate = ally_moves.any? do |mv|
+     checkmate = !ally_moves.any? do |mv|
        #$game_debug += "#{mv}\n"
        blocks = false
        king_escapes = false
        piece = mv.get_piece
        unless piece.kind_of?(King)
          blocks = important_spaces.any? do |space|
-           mv.destination(piece) == space
+            mv.destination(piece) == space
          end
        else
-        temp_state = state.do(mv).data
+        temp_state = state.do(mv)
         king_escapes = !temp_state.in_check?(king: king)
         #$game_debug += "Move:\n #{mv}\n king_escapes: #{king_escapes}\n"
        end

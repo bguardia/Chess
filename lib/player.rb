@@ -44,27 +44,82 @@ end
 
 module ComputerAI
 
-  def return_move(args)
+  def piece_values
+    { Pawn => 10,
+      Knight => 30,
+      Bishop => 30,
+      Rook => 50,
+      Queen =>  90,
+      King => 900}
+  end
+
+  def get_move_value(move)
+    captured = move.get_attr(:capture)
+    unless captured.nil?
+      modifier = captured.team == self.team ? -1 : 1
+      piece_values[captured.class] * modifier
+    else
+      0
+    end
+  end
+
+  def get_best_move(args)
     gamestate = args.fetch(:gamestate)
     current_team = team = self.team
-    op_team = other_team(team)
+    op_team  = other_team(team)
 
     current_state = nil
     queue = [gamestate]
+    
+    current_depth = 0
+    max_depth = 2
+    depth_inc = 1
+    depth_cnt = 0
     loop do
       #Get current state
-      current_state = queue.pop
+      state_arr = queue.pop
+      break if current_depth == max_depth
       break if current_state.nil?
-      
-      
-      if current_state.checkmate?(team: op_team)
-        
-      else
-        current_state.get_moves(team: team)
+      current_state = state_arr[0]
+      move_val = state_arr[1]
+      moves = Movement.validate_moves(current_state.get_moves(team: current_team), current_state)
+      states = []
+      moves.each do |mv|
+        states << [current_state.do(mv), get_move_value(mv) + move_val]
       end
-
+      depth_cnt += 1
+      if depth_cnt % depth_inc >= 1
+        depth_cnt = 0
+        current_depth += 1
+      end
+      queue.concat(states)
     end
+  end
 
+  def return_move(args)
+    gamestate = args.fetch(:gamestate)
+    best_move = minimax_best_move(gamestate, self.team, 2)[0]
+  end
+
+  def minimax_best_move(state, team,  max_depth, current_depth = 0)
+    moves = Movement.validate_moves(state.get_moves(team: team), state).filter { |mv| !mv.blocked? }
+    if current_depth == max_depth
+      mv_val_pairs = moves.map { |mv| [mv, get_move_value(mv)] }
+      return mv_val_pairs 
+    else
+      mv_val_pairs = moves.map do |mv|
+        state.do!(mv)
+        child_mv_val_pairs = minimax_best_move(state, other_team(team), max_depth, current_depth + 1)
+        state.undo
+        child_val = child_mv_val_pairs.empty? ? 0 : child_mv_val_pairs.reduce(child_mv_val_pairs[0][1]) { |lowest, pair| pair[1] < lowest ? pair[1] : lowest }
+        [mv, child_val + get_move_value(mv)]
+      end
+      if current_depth == 0
+        return mv_val_pairs.reduce(mv_val_pairs[0]) { |highest_pair, pair| pair[1] > highest_pair[1] ? pair : highest_pair }
+      else
+        return mv_val_pairs
+      end
+   end
   end
 
   def return_random_move(args)
@@ -91,7 +146,7 @@ end
 class ComputerPlayer < Player
   include ComputerAI
   def get_input(args)
-    return return_random_move(args)
+    return return_move(args)
   end
 
 end
