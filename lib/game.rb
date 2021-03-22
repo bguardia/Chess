@@ -157,7 +157,7 @@ class Game < Saveable
                               gamestate: @gamestate)
      break if @break_game_loop
      move = input.kind_of?(Move) ? input : to_move(input)
-     valid_move = valid?(move)
+     valid_move = move.kind_of?(EmptyMove) ? false : true 
      @io_stream.update
      break if valid_move
    end

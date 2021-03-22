@@ -334,6 +334,10 @@ class StateTree < Saveable
     @current_node.data.get_moves(args)
   end
 
+  def get_valid_moves()
+    @current_node.data.get_valid_moves(self).filter { |mv| !mv.blocked? && !mv.get_attr(:invalid) }
+  end
+
   def get_pieces(args = {})
     @current_node.data.get_pieces(args)
   end
@@ -355,7 +359,7 @@ class StateTree < Saveable
     #get team's king and check if king can escape on its own
     king = state.get_pieces(type: "King", team: team)[0]
     king_cant_escape = king.possible_moves.all? do |mv|
-      next_state = self.do(mv).data
+      next_state = self.do(mv)
       check = next_state.in_check?(king: king)
     end
 
@@ -485,6 +489,7 @@ class State < Saveable
     @check = args.fetch(:check, nil) || { "white" => nil, "black" => nil }
     @checkmate = args.fetch(:checkmate, nil) || { "white" => nil, "black" => nil }
     @last_move = args.fetch(:last_move, nil)
+    @team_to_move = @last_move.nil? ? "white" : ["black", "white"].find { |t| t != @last_move.get_team }
 
     #$game_debug += "pieces: #{@pieces}\n"
     set_moves 
@@ -614,6 +619,11 @@ class State < Saveable
     end
 
     return moves.flatten
+  end
+
+  def get_valid_moves(statetree)
+    move_set = get_moves(team: @team_to_move)
+    Movement.validate_moves(move_set, statetree)
   end
 
   def get_pieces(args = {})

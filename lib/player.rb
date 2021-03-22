@@ -63,47 +63,65 @@ module ComputerAI
     end
   end
 
-  def get_best_move(args)
-    gamestate = args.fetch(:gamestate)
-    current_team = team = self.team
-    op_team  = other_team(team)
-
-    current_state = nil
-    queue = [gamestate]
-    
-    current_depth = 0
-    max_depth = 2
-    depth_inc = 1
-    depth_cnt = 0
-    loop do
-      #Get current state
-      state_arr = queue.pop
-      break if current_depth == max_depth
-      break if current_state.nil?
-      current_state = state_arr[0]
-      move_val = state_arr[1]
-      moves = Movement.validate_moves(current_state.get_moves(team: current_team), current_state)
-      states = []
-      moves.each do |mv|
-        states << [current_state.do(mv), get_move_value(mv) + move_val]
-      end
-      depth_cnt += 1
-      if depth_cnt % depth_inc >= 1
-        depth_cnt = 0
-        current_depth += 1
-      end
-      queue.concat(states)
-    end
-  end
-
   def return_move(args)
     gamestate = args.fetch(:gamestate)
-    best_move = minimax_best_move(gamestate, self.team, 2)[0]
+    best_move = minimax(gamestate, 2) 
   end
 
-  def minimax_best_move(state, team,  max_depth, current_depth = 0)
-    moves = Movement.validate_moves(state.get_moves(team: team), state).filter { |mv| !mv.blocked? }
-    if current_depth == max_depth
+  def min(state, depth)
+    if depth == 0 || state.checkmate?(other_team(self.team))
+      mv = state.get_last_move
+      return get_move_value(mv)
+    end 
+      moves = state.get_valid_moves
+      min = Float::INFINITY
+      moves.each do |mv|
+        score = get_move_value(mv) + max(state, depth - 1)
+        if score < min
+          min = score
+        end
+      end
+      return min
+  end
+
+  def max(state, depth)
+    if depth == 0 || state.checkmate?(self.team)
+      mv = state.get_last_move
+      return get_move_value(mv)
+    end
+
+      moves = state.get_valid_moves
+      max = -Float::INFINITY
+      moves.each do |mv|
+        state.do!(mv)
+        score = get_move_value(mv) + min(state, depth - 1)
+        state.undo
+        if score > max
+          max = score
+        end
+      end
+    return max
+  end
+
+  def minimax(state, depth)
+    moves = state.get_valid_moves
+    best_move = nil
+    max_value = -Float::INFINITY
+    moves.each do |mv|
+      state.do!(mv)
+      score = min(state, depth - 1)
+      state.undo
+      if score > max_value
+        best_move = mv
+      end
+    end
+
+    return best_move    
+  end
+
+  def minimax_best_move(state, team, depth)
+    moves = state.get_valid_moves 
+    if depth == 0
       mv_val_pairs = moves.map { |mv| [mv, get_move_value(mv)] }
       return mv_val_pairs 
     else
@@ -111,6 +129,7 @@ module ComputerAI
         state.do!(mv)
         child_mv_val_pairs = minimax_best_move(state, other_team(team), max_depth, current_depth + 1)
         state.undo
+        #get lowest value among child moves. If there are no moves, set to 0
         child_val = child_mv_val_pairs.empty? ? 0 : child_mv_val_pairs.reduce(child_mv_val_pairs[0][1]) { |lowest, pair| pair[1] < lowest ? pair[1] : lowest }
         [mv, child_val + get_move_value(mv)]
       end
@@ -120,6 +139,39 @@ module ComputerAI
         return mv_val_pairs
       end
    end
+  end
+
+  def negamax(state, depth)
+    moves = state.get_valid_moves
+    scored_moves = moves.map do |mv|
+      state.do!(mv)
+      score = negamax_recursive(state, depth - 1, -1)
+      state.undo
+      [mv, score + get_move_value(mv)]
+    end
+  
+    best_move = scored_moves.reduce(scored_moves[0]) do |best, score_move|
+      score_move[1] > best[1] ? score_move : best
+    end
+    
+    return best_move[0]
+  end
+
+  def negamax_recursive(state, depth, color)
+    if depth == 0
+      return get_move_value(state.get_last_move) * color
+    end
+    max = -Float::INFINITY
+    moves = state.get_valid_moves
+    moves.each do |mv|
+      state.do!(mv)
+      score = -negamax_recursive(state, depth - 1, -color)
+      state.undo
+      if score > max
+        max = score
+      end
+    end
+    return max
   end
 
   def return_random_move(args)
