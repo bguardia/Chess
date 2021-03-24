@@ -170,7 +170,9 @@ def load_save(args)
  content = []
  SaveHelper.saves.each do |save|
    content << save.to_s
-   actions << -> { init_game_ui(save.data); save.data.start }
+   game = Game.new
+   game.load(save.data)
+   actions << -> { init_game_ui(game); game.start }
  end
 =begin
  load_menu = WindowTemplates.menu_two(height:35,

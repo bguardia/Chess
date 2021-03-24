@@ -326,6 +326,10 @@ class StateTree < Saveable
     @current_node.data.last_move
   end
 
+  def get_active_team
+    @current_node.data.get_active_team
+  end
+
   def get_last_moved
     @current_node.data.get_last_moved
   end
@@ -493,6 +497,10 @@ class State < Saveable
 
     #$game_debug += "pieces: #{@pieces}\n"
     set_moves 
+  end
+
+  def get_active_team
+    @team_to_move
   end
 
   def get_positions

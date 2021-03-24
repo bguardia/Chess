@@ -12,7 +12,7 @@ class Game < Saveable
    @gamestate = args.fetch(:gamestate, false) || set_gamestate
    @current_player = args.fetch(:current_player, nil)
    @move_history = args.fetch(:move_history, [])
-   @turn_num = args.fetch(:turn_num, nil)
+   @turn_num = args.fetch(:turn_num, 1)
    @break_game_loop = false
    set_ui(args)
  end
@@ -47,6 +47,7 @@ class Game < Saveable
 
  def update_move_history(move)
    #load move_history into input array if sizes don't match
+   if @move_history_input
    if @move_history.length != @move_history_input.length
      @move_history.each_index do |i|
        if @move_history_input.length - 1 >= i
@@ -56,15 +57,21 @@ class Game < Saveable
        end
      end
    end
+   end
 
    note = ChessNotation.move_to_notation(move, @gamestate)
-   l = @move_history_input.length
+  
+   l = @move_history.length
    if @turn_num == l 
      @move_history[@turn_num - 1] += " #{note}"
-     @move_history_input[@turn_num - 1] += " #{note}"
+     if @move_history_input
+       @move_history_input[@turn_num - 1] += " #{note}"
+     end
    else
      @move_history << "#{@turn_num} #{note}"
-     @move_history_input << "#{@turn_num} #{note}"
+     if @move_history_input
+       @move_history_input << "#{@turn_num} #{note}"
+     end
    end
  end
 
@@ -82,14 +89,9 @@ class Game < Saveable
    @players[0].team = "white"
    @players[1].team = "black"
    @current_player = @players[0]
+ 
+   initialize_gamestate 
   
-   #Pieces and Board observe changes in gamestate and update themselves accordingly 
-   piece_observer = Observer.new(to_do: ->(state) { Piece.update_pieces(state) })
-   board_observer = Observer.new(to_do: ->(state) { @board.update(state) })
-   @gamestate.add_observer(piece_observer)
-   @gamestate.add_observer(board_observer)
-   @gamestate.notify_observers
-
    @input_handler = InputHandler.new(in: @io_stream)
    @players.each do |p|
      p.set_input_handler(@input_handler)
@@ -107,8 +109,22 @@ class Game < Saveable
      end
    end
 
-
    play
+ end
+
+ def initialize_gamestate
+   #Pieces and Board observe changes in gamestate and update themselves accordingly 
+   piece_observer = Observer.new(to_do: ->(state) { Piece.update_pieces(state) })
+   board_observer = Observer.new(to_do: ->(state) { @board.update(state) })
+   @gamestate.add_observer(piece_observer)
+   @gamestate.add_observer(board_observer)
+   @gamestate.notify_observers
+ end
+
+ def update_turn_num
+   if @current_player.team == "white"
+     @turn_num += 1
+   end
  end
 
  def play
@@ -121,9 +137,7 @@ class Game < Saveable
      $game_debug += "play loop not broken\n"
      change_current_player
      game_over = game_over?
-     if @current_player.team == "white"
-       @turn_num += 1
-     end
+     update_turn_num
    end
 
    $game_debug += "Broke out of play loop\n"
@@ -286,15 +300,44 @@ class Game < Saveable
    exit
 =end
    save_title = "#{@players[0].name} vs. #{@players[1].name}"
-   data = self.to_json
+   notation = @move_history.reduce([]) do |arr, str| 
+     subarr = str.split(' ')
+     subarr.shift
+     arr.concat(subarr)
+   end
+
+   data = { notation: notation,
+            players: @players,
+            turn_num: @turn_num }  #self.to_json
+
    board_state = @board.to_s
    SaveHelper.save(title: save_title,
                    data: data,
                    board_state: board_state)
+   
    break_game_loop
  end
 
- def self.load(saved_game); end
+ def load(save_data)
+   @players = save_data.fetch(:players)
+   @current_player = @players.find { |p| p.team = "white" }
+   notation = save_data.fetch(:notation)
+
+   piece_observer = Observer.new(to_do: ->(state) { Piece.update_pieces(state) })
+   @gamestate.add_observer(piece_observer)
+   @gamestate.notify_observers
+
+   notation.each do |note|
+     $game_debug += "note is: #{note}\n"
+     move = ChessNotation.from_notation(note, @gamestate)
+     $game_debug += "move is: #{move}\n"
+     @gamestate.do!(move)
+     $game_debug += "gamestate updated\n"
+     update_move_history(move)
+     change_current_player     
+     update_turn_num
+   end
+ end
 end
 
 module ChessNotation
@@ -515,7 +558,9 @@ module ChessNotation
    end
 
    def self.from_notation(note, state)
+     $game_debug += "note before clean: #{note}\n"
      note = clean(note)
+     $game_debug += "note after clean: #{note}\n"
      return nil if note.nil?
 
      #If castle notation, run separate function
@@ -528,28 +573,33 @@ module ChessNotation
      capture = note_hash[:capture]
      r = note_hash[:rank]
      f = note_hash[:file]
-     
+     $game_debug += "Decomped note. Results are: p: #{p}\n dtl: #{dtl}\n capture: #{capture}\n r: #{r}\n f: #{f}\n" 
      pos = [from_rank(r), from_file(f)]
-
+     $game_debug += "pos is: #{pos}\n"
      #Get pieces of the same type who can reach the position
      possible_pieces = Movement.who_can_reach?(pos, state, type: p)
+     $game_debug += "possible pieces are: #{possible_pieces}\n"
      if possible_pieces.length > 1
-       piece = possible_pieces.find do |p|
+       possible_pieces.select! do |p|
+         p.team == state.get_active_team
+       end
+       if possible_pieces.length > 1
          current_pos = state.get_pos(p)
          current_pos[0] == dtl[0] || current_pos[1] == dtl[1]
        end
      elsif possible_pieces.length == 0
        return nil
-     else
-       piece = possible_pieces[0]
      end
-
+     piece = possible_pieces[0]
      #Return move
      move_hash = { piece: piece, 
                    prev_pos: state.get_pos(piece), 
                    pos: pos, 
                    capture: capture,
-                   removed: board.get_piece_at(pos) }
+                   removed: state.get_piece_at(pos) }
+     $game_debug += "move_hash:\n#{move_hash}\n"
+
+     move = Movement.return_move(state.get_pos(piece), pos, state)[0]
    end
 
    #return any clarifying notes if piece & move combo are unclear
