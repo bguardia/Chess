@@ -93,7 +93,7 @@ def get_players(args)
   num_players = 0
   num_comps = 0
   content = ["Player vs. Player", "Player vs. Computer", "Computer vs. Computer"]
-  actions = [->{ num_players = 2 }, ->{ num_players = num_comps = 1 }, ->{ num_comps = 2 }]
+  #actions = [->{ num_players = 2 }, ->{ num_players = num_comps = 1 }, ->{ num_comps = 2 }]
 =begin
   h = 15
   w = 35
@@ -101,11 +101,19 @@ def get_players(args)
   l = (Curses.cols - w) / 2
 =end  
   who_plays_menu = WindowTemplates.menu_two(args.merge(title: "Choose who will play:",
-                                            content: content,
-                                            actions: actions))
+                                            content: content))
+                                            #actions: actions))
   who_plays_menu.update
-  InputHandler.new(in: who_plays_menu).get_input
-  
+  choice = InputHandler.new(in: who_plays_menu).get_input
+  case choice
+  when 0
+    num_players = 2
+  when 1
+    num_players = num_comps = 1
+  when 2
+    num_comps = 2
+  end
+
   unless num_players == 0 && num_comps == 0 #don't create players if a selection isn't made
     #Ask for player names using input boxes
     create_box = ->(title){ WindowTemplates.input_box(args.merge(title: title)) }
@@ -170,9 +178,12 @@ def load_save(args)
  content = []
  SaveHelper.saves.each do |save|
    content << save.to_s
-   game = Game.new
-   game.load(save.data)
-   actions << -> { init_game_ui(game); game.start }
+   if save.kind_of?(EmptySave)
+     actions << ->{}
+   else
+     action = -> { game = Game.new; game.load(save.data); init_game_ui(game); game.start }
+     actions << action
+   end 
  end
 =begin
  load_menu = WindowTemplates.menu_two(height:35,
@@ -209,7 +220,6 @@ def quit_game(args)
 =end
   title = "Quit Game"
   content = "Are you sure you'd like to quit the game?"
-  buttons = [["Yes", ->{ exit }], ["No", nil]]
 =begin
   quit_confirm = WindowTemplates.confirmation_screen(height: 15,
                                       width: 30,
@@ -220,9 +230,13 @@ def quit_game(args)
                                       content: content,
                                       buttons: buttons)
 =end  
-  quit_confirm = WindowTemplates.confirmation_screen(args.merge(title: title, content: content, buttons: buttons))
+  quit_confirm = WindowTemplates.confirmation_screen(args.merge(title: title, content: content))
   quit_confirm.update
-  InputHandler.new(in: quit_confirm).get_input
+  quit_bool = InputHandler.new(in: quit_confirm).get_input
+  $game_debug += "quit_bool is: #{quit_bool}\n"
+  if quit_bool == 1
+    exit
+  end
 end
 
 def about_game(args)

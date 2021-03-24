@@ -313,7 +313,7 @@ module InteractiveWindow
   end
 
   def merge_key_map(key_map)
-    @key_map = key_map.merge(key_map)
+    @key_map = @key_map.merge(key_map)
   end
 
   def get_action(action_str)
@@ -924,8 +924,16 @@ class Menu < List
     @selected_col = args.fetch(:col2, nil)
     @unselected_col = args.fetch(:col1, nil)
     @item_padding = args.fetch(:item_padding, nil) || 0
+    @key_map = default_key_map.merge(args.fetch(:key_map, {}))
+
     $game_debug += "Menu contents (length: #{@content.length}) are: #{@content}\n"
     update
+  end
+
+  def default_key_map
+    { Keys::UP => -> { to_up },
+      Keys::DOWN => -> { to_down },
+      Keys::ENTER => -> { select }}
   end
 
   def line_increment
@@ -949,6 +957,10 @@ class Menu < List
     end
     update
   end 
+
+  def selected
+    @pos_y
+  end
 
   def active
     @actions[@pos_y]
@@ -999,9 +1011,7 @@ class Menu < List
   end
 
   def key_map
-    { Keys::UP => -> { to_up },
-      Keys::DOWN => -> { to_down },
-      Keys::ENTER => -> { select }}
+    @key_map
   end
 
   def before_get_input
@@ -1038,8 +1048,14 @@ class TypingField < Window
    @input_to_return = "" 
    @content = ""
    @break = false
+   @key_map = default_key_map.merge(args.fetch(:key_map, {}))
  end
 
+ def default_key_map
+   {Keys::ENTER => -> { @break = true},
+    Keys::BACKSPACE => -> { on_backspace }}
+ end
+ 
  def set_color
    col = Curses.color_pair(return_c_pair(@fg, @bg))
    @win.attron(col)
@@ -1049,11 +1065,6 @@ class TypingField < Window
    @win.setpos(0,0)
    @win.touch
    @win.refresh
- end
-
- def key_map
-   {Keys::ENTER => -> { @break = true},
-    Keys::BACKSPACE => -> { on_backspace }}
  end
 
  def on_backspace
@@ -1523,8 +1534,9 @@ module WindowTemplates
     col1 = args.fetch(:col1, [:white, :black])
     col2 = args.fetch(:col2, [:red, :yellow])
     content = args.fetch(:content)
-    actions = args.fetch(:actions)
- 
+    actions = args.fetch(:actions, nil)
+    
+   
     padding = args.fetch(:padding, nil) || 1
     padding_top = args.fetch(:padding_top, nil) || padding
     padding_left = args.fetch(:padding_left, nil) || padding
@@ -1583,6 +1595,17 @@ module WindowTemplates
     menu_l = win_l + padding_left
     num_lines = args.fetch(:lines, nil) || menu_h
     item_padding = args.fetch(:item_padding, nil)
+
+    #Default behavior for actions is to return index of content selected
+    if actions.nil?
+      num_content = content.length
+      actions = []
+      num_content.times do |i|
+        actions << ->{ menu_screen.break; return i }
+      end
+    end
+
+
     menu = Menu.new(height: menu_h,
                     width: menu_w,
                     top: menu_t,
@@ -1594,6 +1617,8 @@ module WindowTemplates
                     col1: col1,
                     col2: col2)
 
+    menu.merge_key_map(Keys::ENTER => ->{ menu.input_to_return = menu.selected; menu_screen.break; $game_debug += "pressed enter in menu. menu.selected: #{menu.selected}"})
+    $game_debug += "menu key map is: #{menu.key_map}\n"
     $game_debug += "Created menu\n"
 
     menu_screen.add_region(menu_title)
@@ -1605,6 +1630,22 @@ module WindowTemplates
 
     menu_screen.set_active_region(menu)
     return menu_screen
+  end
+
+  def self.save_menu(args = {}) #must pass :content
+    default_settings = { height: 35,
+                         width: 55,
+                         top: (Curses.lines - 35)/2,
+                         left: (Curses.cols - 55)/2,
+                         lines: 3, 
+                         title: "Load Save", 
+                         item_padding: 1 }
+
+    args = default_settings.merge(args)
+
+    $game_debug += "called WindowTemplates.save_menu.\nargs are:#{args}\n"
+    self.menu_two(args)
+
   end
 
   def self.input_box(args = {})
@@ -1946,7 +1987,7 @@ module WindowTemplates
 
     screen = InteractiveScreen.new(args)
 
-    button_set = self.button_set(args)
+    #button_set = self.button_set(args)
     
     title_h = 3
     title_w = win_w - padding_right - padding_left
@@ -1960,7 +2001,7 @@ module WindowTemplates
                                   left: title_l)
 
     btn_h = 5
-    buttons = args.fetch(:buttons, nil) || [["Cancel", nil], ["Confirm", nil]]
+    buttons = args.fetch(:buttons, nil) || [["Yes", nil], ["No", nil]]
 
     default_button_settings = { height: btn_h,
                                 width: win_w - padding * 2,
@@ -1969,6 +2010,15 @@ module WindowTemplates
                                 buttons: buttons }
 
     button_set = self.button_set(default_button_settings)
+    
+    button_set.interactive_rgns.each do |rgn|
+      if rgn.content == "Yes"
+        to_return = 1
+      else
+        to_return = 0
+      end
+      rgn.merge_key_map(Keys::ENTER => ->{ rgn.input_to_return = to_return; screen.break; $game_debug += "called btn enter key map\n" })
+    end
 
     content = args.fetch(:content, nil) || ""
     content_win = Window.new(height: win_h - title_h - btn_h - padding_top - padding_bottom,

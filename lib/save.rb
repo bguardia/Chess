@@ -152,6 +152,7 @@ end
 
 module SaveHelper
 
+  @@max_saves = 3
   @@file_loc = "./my_save.txt"
   @@save_file = nil
   @@saves = []
@@ -160,9 +161,19 @@ module SaveHelper
     @@saves
   end
 
-  def self.load_save_file
+  def self.num_saves
+    if @@saves.empty?
+      self.load_save_file
+      self.load_saves
+      self.close_save_file
+    end
+
+    @@max_saves - @@saves.count { |sv| sv.kind_of?(EmptySave) }
+  end
+
+  def self.load_save_file(fmode = "r+")
     return true if @@save_file
-    @@save_file = File.open(@@file_loc, "a+")
+    @@save_file = File.open(@@file_loc, fmode)
   end
 
   def self.close_save_file
@@ -172,20 +183,88 @@ module SaveHelper
     end
   end
 
-  def self.load_saves
-    self.load_save_file
-    self.clear_saves
+  def self._load_saves
     @@save_file.each do |line|
       @@saves << Save.from_json(line)
     end
+    (@@max_saves - @@saves.length).times do
+      @@saves << EmptySave.new
+    end
+  end
+
+  #public version of method
+  def self.load_saves
+    self.load_save_file
+    self.clear_saves
+    self._load_saves
     self.close_save_file
   end
 
   def self.save(args)
     save = Save.new(args)
-    self.load_save_file
-    @@save_file.puts save.to_json
+    self.load_saves
+
+    if self.num_saves >= @@max_saves
+      self.full_save_prompt
+    end
+
+    i = @@saves.find_index { |el| el.kind_of?(EmptySave) }
+    $game_debug += "@@saves.find_index { |el| el.kind_of?(EmptySave) } = #{i}\n"
+    unless i.nil?
+      @@saves[i] = save
+      saves_str = @@saves.map { |save| save.to_json }.join("\n")
+      $game_debug += "@@saves:\n#{@@saves}\n"
+      File.open(@@file_loc, "w") { |f| f.puts saves_str }
+    end
     self.close_save_file
+  end
+
+  def self.full_save_prompt
+      p = 2
+      h = 19 + p * 2
+      w = 40 + p * 2
+      t = (Curses.lines - h) / 2
+      l = (Curses.cols - w) / 2
+      args = { padding: 2,
+               height: h,
+               width: w,
+               top: t,
+               left: l }
+
+      loop do
+        quit_without_save_bool = false
+        delete_save_bool = false
+
+        confirm_win = WindowTemplates.confirmation_screen(args.merge(content: "There are no save files remaining. Would you like to delete a save and write over it?"))
+        confirm_win.update
+        delete_save_bool = InputHandler.new(in: confirm_win).get_input
+        $game_debug += "delete_save_bool is: #{delete_save_bool}\n"
+
+        if delete_save_bool
+          save_strs = @@saves.map { |save| save.to_s }
+          save_menu = WindowTemplates.save_menu(content: save_strs)
+          save_menu.update
+          save_to_delete = InputHandler.new(in: save_menu).get_input
+          $game_debug += "save_to_delete: #{save_to_delete}\n"
+          unless save_to_delete.nil?
+            self.delete_save(save_to_delete)
+          else
+            delete_save_bool = false
+          end
+        end
+
+        unless delete_save_bool
+          confirm_win = WindowTemplates.confirmation_screen(args.merge(content: "Are you sure you want to quit the game without saving?"))
+         confirm_win.update
+         quit_without_save_bool = InputHandler.new(in: confirm_win).get_input
+        end
+
+        break if quit_without_save_bool || delete_save_bool
+      end
+  end
+
+  def self.delete_save(i)
+    @@saves[i] = EmptySave.new
   end
 
   def self.clear_saves
@@ -234,4 +313,11 @@ class Save < Saveable
 
 end
 
+class EmptySave < Save
+  def initialize(args = {}); end
+
+  def to_s
+    return " \n \n \n \nEmpty\n \n \n \n "
+  end
+end
 
