@@ -431,10 +431,14 @@ module Movement
 
   def self.who_can_reach?(pos, board, args = {})
     pieces = board.get_pieces(args)
+    $game_debug += "pieces: #{pieces}\n"
     pieces.filter! do |piece|
-      piece.can_reach?(pos)
+      can_reach = piece.can_reach?(pos)
+      $game_debug += "for #{piece.class} (#{piece.id}): can_reach is #{can_reach}\n"
+      can_reach
     end
 
+    $game_debug += "pieces is now: #{pieces}\n"
     return pieces
   end
 

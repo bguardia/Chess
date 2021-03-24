@@ -43,24 +43,110 @@ class Player < Saveable
 end
 
 module ComputerAI
+  #Values taken from https://www.chessprogramming.org/Simplified_Evaluation_Function
+  PAWN_BOARD = [[0,  0,  0,  0,  0,  0,  0,  0],
+                [50, 50, 50, 50, 50, 50, 50, 50],
+                [10, 10, 20, 30, 30, 20, 10, 10],
+                [5,  5, 10, 25, 25, 10,  5,  5],
+                [0,  0,  0, 20, 20,  0,  0,  0],
+                [5, -5,-10,  0,  0,-10, -5,  5],
+                [5, 10, 10,-20,-20, 10, 10,  5],
+                [0,  0,  0,  0,  0,  0,  0,  0]]
+
+  KNIGHT_BOARD = [[-50,-40,-30,-30,-30,-30,-40,-50],
+                 [-40,-20,  0,  0,  0,  0,-20,-40],
+                 [-30,  0, 10, 15, 15, 10,  0,-30],
+                 [-30,  5, 15, 20, 20, 15,  5,-30],
+                 [-30,  0, 15, 20, 20, 15,  0,-30],
+                 [-30,  5, 10, 15, 15, 10,  5,-30],
+                 [-40,-20,  0,  5,  5,  0,-20,-40],
+                 [-50,-40,-30,-30,-30,-30,-40,-50]]
+
+
+  BISHOP_BOARD = [[-20,-10,-10,-10,-10,-10,-10,-20],
+                 [ -10,  0,  0,  0,  0,  0,  0,-10],
+                 [ -10,  0,  5, 10, 10,  5,  0,-10],
+                 [ -10,  5,  5, 10, 10,  5,  5,-10],
+                 [ -10,  0, 10, 10, 10, 10,  0,-10],
+                 [ -10, 10, 10, 10, 10, 10, 10,-10],
+                 [ -10,  5,  0,  0,  0,  0,  5,-10],
+                 [ -20,-10,-10,-10,-10,-10,-10,-20]]
+
+  ROOK_BOARD = [[  0,  0,  0,  0,  0,  0,  0,  0],
+                [  5, 10, 10, 10, 10, 10, 10,  5],
+                [ -5,  0,  0,  0,  0,  0,  0, -5],
+                [ -5,  0,  0,  0,  0,  0,  0, -5],
+                [ -5,  0,  0,  0,  0,  0,  0, -5],
+                [ -5,  0,  0,  0,  0,  0,  0, -5],
+                [ -5,  0,  0,  0,  0,  0,  0, -5],
+                [  0,  0,  0,  5,  5,  0,  0,  0]]
+
+  QUEEN_BOARD = [[-20,-10,-10, -5, -5,-10,-10,-20],
+                 [ -10,  0,  0,  0,  0,  0,  0,-10],
+                 [ -10,  0,  5,  5,  5,  5,  0,-10],
+                 [  -5,  0,  5,  5,  5,  5,  0, -5],
+                 [   0,  0,  5,  5,  5,  5,  0, -5],
+                 [ -10,  5,  5,  5,  5,  5,  0,-10],
+                 [ -10,  0,  5,  0,  0,  0,  0,-10],
+                 [ -20,-10,-10, -5, -5,-10,-10,-20]]
+
+  KING_BOARD = [[-30,-40,-40,-50,-50,-40,-40,-30],
+                [ -30,-40,-40,-50,-50,-40,-40,-30],
+                [ -30,-40,-40,-50,-50,-40,-40,-30],
+                [ -30,-40,-40,-50,-50,-40,-40,-30],
+                [ -20,-30,-30,-40,-40,-30,-30,-20],
+                [ -10,-20,-20,-20,-20,-20,-20,-10],
+                [  20, 20,  0,  0,  0,  0, 20, 20],
+                [  20, 30, 10,  0,  0, 10, 30, 20]]
+
+  def get_space_value(piece, space, team)
+    table_hash = { Pawn => PAWN_BOARD,
+                   Knight => KNIGHT_BOARD,
+                   Bishop => BISHOP_BOARD,
+                   Rook => ROOK_BOARD,
+                   Queen => QUEEN_BOARD,
+                   King => KING_BOARD }
+
+    r = space[0]
+    f = space[1]
+    board = table_hash[piece.class]
+
+    if team == "black"
+      board = board.reverse 
+    end
+
+    return board[r][f]
+  end
 
   def piece_values
-    { Pawn => 10,
-      Knight => 30,
-      Bishop => 30,
-      Rook => 50,
-      Queen =>  90,
-      King => 900}
+    { Pawn => 100,
+      Knight => 320,
+      Bishop => 330,
+      Rook => 500,
+      Queen =>  900,
+      King => 20000}
   end
 
   def get_move_value(move)
-    captured = move.get_attr(:capture)
-    unless captured.nil?
-      modifier = captured.team == self.team ? -1 : 1
-      piece_values[captured.class] * modifier
-    else
-      0
+    #$game_debug += "move: #{move}\n"
+    piece = move.get_piece
+    pos = move.destination(piece)
+    if pos.nil?
+      piece = move.get_promoted
+      pos = move.destination(piece)
     end
+
+    captured = move.get_attr(:capture)
+
+    space_val = get_space_value(piece, pos, piece.team)
+    #$game_debug += "space_val: #{space_val}\n"
+    capture_val = 0
+    unless captured.nil?
+      capture_val = piece_values[captured.class]
+    end
+
+    modifier = piece.team == self.team ? 1 : -1 
+    return modifier * (space_val + capture_val)
   end
 
   def return_move(args)
@@ -110,12 +196,15 @@ module ComputerAI
     moves.each do |mv|
       state.do!(mv)
       score = min(state, depth - 1)
+      $game_debug += "move (score: #{score}): #{mv}\n"
       state.undo
       if score > max_value
         best_move = mv
+        max_value = score
       end
     end
 
+    $game_debug += "Selected move was: #{best_move} (score: #{max_value})"
     return best_move    
   end
 

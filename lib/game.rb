@@ -328,11 +328,11 @@ class Game < Saveable
    @gamestate.notify_observers
 
    notation.each do |note|
-     $game_debug += "note is: #{note}\n"
+     #$game_debug += "note is: #{note}\n"
      move = ChessNotation.from_notation(note, @gamestate)
-     $game_debug += "move is: #{move}\n"
+     #$game_debug += "move is: #{move}\n"
      @gamestate.do!(move)
-     $game_debug += "gamestate updated\n"
+     #$game_debug += "gamestate updated\n"
      update_move_history(move)
      change_current_player     
      update_turn_num
@@ -573,12 +573,12 @@ module ChessNotation
      capture = note_hash[:capture]
      r = note_hash[:rank]
      f = note_hash[:file]
-     $game_debug += "Decomped note. Results are: p: #{p}\n dtl: #{dtl}\n capture: #{capture}\n r: #{r}\n f: #{f}\n" 
+     #$game_debug += "Decomped note. Results are: p: #{p}\n dtl: #{dtl}\n capture: #{capture}\n r: #{r}\n f: #{f}\n" 
      pos = [from_rank(r), from_file(f)]
-     $game_debug += "pos is: #{pos}\n"
+     #$game_debug += "pos is: #{pos}\n"
      #Get pieces of the same type who can reach the position
      possible_pieces = Movement.who_can_reach?(pos, state, type: p)
-     $game_debug += "possible pieces are: #{possible_pieces}\n"
+     #$game_debug += "possible pieces are: #{possible_pieces}\n"
      if possible_pieces.length > 1
        possible_pieces.select! do |p|
          p.team == state.get_active_team
@@ -597,7 +597,7 @@ module ChessNotation
                    pos: pos, 
                    capture: capture,
                    removed: state.get_piece_at(pos) }
-     $game_debug += "move_hash:\n#{move_hash}\n"
+     #$game_debug += "move_hash:\n#{move_hash}\n"
 
      move = Movement.return_move(state.get_pos(piece), pos, state)[0]
    end
