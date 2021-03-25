@@ -127,23 +127,67 @@ module Movement
   end
 
   def castling(king, state)
-    unless king.moved?
+    $game_debug += "called castling\n"
+    in_check = state.in_check?(king: king)
+    $game_debug += "in_check is: #{in_check}\n"
+    unless state.get_moved_status(king) || in_check
       castles = []
       rooks = state.get_pieces(type: "Rook", team: king.team, moved: false)
       rooks.each do |rook|
+        #check spaces between rook and king are open
         spaces_between = Movement.get_spaces_between(king.current_pos, rook.current_pos)
-        not_blocked = spaces_between.map { |pos| state.get_piece_at(pos) }.compact.empty?
+        #$game_debug += "spaces_between king and rook are: #{spaces_between}\n"
+        piece_array = spaces_between.map { |pos| state.get_piece_at(pos) }
+        #$game_debug += "piece array is:\n"
+=begin
+        piece_array.each do |p|
+          if p.kind_of?(Piece)
+            $game_debug += "#{p.team} #{p.class} (#{p.id})\n"
+          end
+        end
+=end
+
+         not_blocked = piece_array.compact.empty?
+        #$game_debug += "not_blocked is: #{not_blocked}\n"
         if not_blocked
-          king_dest = [ rook.current_pos[0] < king.current_pos[0] ? 2 : 6, king.current_pos[1]]
-          rook_dest = [ rook.current_pos[0] < king.current_pos[0] ? 3 : 5, rook.current_pos[1]]
+          king_pos = state.get_pos(king)
+          rook_pos = state.get_pos(rook)
+          king_dest = [ king_pos[0], rook_pos[1] < king_pos[1] ? 2 : 6]
+          rook_dest = [ rook_pos[0], rook_pos[1] < king_pos[1] ? 3 : 5]
+
+          #check that the spaces the king traverses are not attackable
+          king_traverse = Movement.get_spaces_between(king.current_pos, king_dest) 
+          #$game_debug += "checking for attacking pieces...\n"
+          #$game_debug  += "king_traverse is: #{king_traverse}\n"
+          enemy_team = ["white", "black"].find { |t| t != king.team }
+          enemy_moves = state.get_moves(team: enemy_team).compact
+          #$game_debug += "enemy moves it:\n"
+          #enemy_moves.each do |mv|
+            #$game_debug += "#{mv}\n"
+          #end
+          attackable = enemy_moves.any? do |mv|
+            king_traverse.any? do |space|
+              mv.include?(space)
+            end
+          end
+          
+          $game_debug += "attackable is: #{attackable}\n"
+          unless attackable
           castles << Move.new(move: [[king, king.current_pos, king_dest],
                                      [rook, rook.current_pos, rook_dest]],
                               type: :castle)
+          end
         end
       end
+=begin
+      $game_debug += "castles is:\n"
+      castles.each do |mv|
+        $game_debug += "#{mv}\n"
+      end
+=end      
       return castles
     end
-           
+    #$game_debug += "king has already moved. returning empty array.\n"
     return []
   end
 
