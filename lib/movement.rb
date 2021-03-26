@@ -160,7 +160,7 @@ module Movement
           #$game_debug += "checking for attacking pieces...\n"
           #$game_debug  += "king_traverse is: #{king_traverse}\n"
           enemy_team = ["white", "black"].find { |t| t != king.team }
-          enemy_moves = state.get_moves(team: enemy_team).compact
+          enemy_moves = state.get_moves(team: enemy_team).filter { |mv| !mv.blocked? }
           #$game_debug += "enemy moves it:\n"
           #enemy_moves.each do |mv|
             #$game_debug += "#{mv}\n"
