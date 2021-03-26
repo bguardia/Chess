@@ -626,7 +626,7 @@ class State < Saveable
       @pieces[piece][:moves]
     end
 
-    return moves.flatten
+    return moves.compact.flatten
   end
 
   def get_valid_moves(statetree)
@@ -667,7 +667,7 @@ class State < Saveable
     king_pos = get_pos(king)
     enemy_pieces = get_pieces.filter { |p| p.team != team }
     attackers = enemy_pieces.filter do |ep|
-      ep_moves = get_moves(id: ep.id).flatten
+      ep_moves = get_moves(id: ep.id)
       ep_moves.any? do |move|
         next if move.blocked?
         move.include?(king_pos)
