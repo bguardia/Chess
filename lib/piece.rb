@@ -173,6 +173,10 @@ class Piece < Saveable
     end
   end
 =end
+  def ignore_on_serialization
+    ["@possible_moves",
+     "@blocked_moves"]
+  end
 
   def self.create_observer
     Observer.new(to_do:->(state) { self.update_pieces(state) })
@@ -195,6 +199,10 @@ class Piece < Saveable
   #Special moves are any moves that require a greater context, such as en passant or castling,
   #therefore requiring board to be passed as an argument
   def generate_possible_moves(state)
+  end
+
+  def generate_special_moves(state)
+    []
   end
 
   def possible_moves
@@ -292,6 +300,10 @@ class King < Piece
   def generate_possible_moves(state)
     king_moves(self, state)
   end
+
+  def generate_special_moves(state)
+    castling(self, state)
+  end
 end
 
 class Bishop < Piece
@@ -321,6 +333,10 @@ class Pawn < Piece
 
   def generate_possible_moves(state)
     pawn_moves(self, state)
+  end
+
+  def generate_special_moves(state)
+    en_passant(self, state)
   end
 end
 

@@ -398,7 +398,7 @@ class StateTree < Saveable
     end
 =end
 
-     ally_moves = get_moves(team: team)
+     ally_moves = get_moves(team: team).filter { |mv| !mv.blocked? }
      checkmate = !ally_moves.any? do |mv|
        #$game_debug += "#{mv}\n"
        blocks = false
@@ -521,6 +521,20 @@ class State < Saveable
     @pieces.each_key do |piece|
       exists = @pieces[piece][:pos]
       @pieces[piece].merge!({ :moves => exists ? piece.generate_possible_moves(self) : nil }) 
+    end
+
+    @pieces.each_key do |piece|
+      exists = @pieces[piece][:pos]
+      if exists && @pieces[piece][:moves]
+        mv_len = @pieces[piece][:moves].to_a.length
+        var_type = @pieces[piece][:moves].class
+        $game_debug += "piece: #{piece.team} #{piece.class} (#{piece.id}), moves length: #{mv_len}, class: #{var_type}\n"
+        special_moves = piece.generate_special_moves(self)
+        spmv_len = special_moves.to_a.length
+        spvar_type = special_moves.class
+        $game_debug += "special_moves length is: #{spmv_len}, class: #{spvar_type}\n"
+        @pieces[piece][:moves].to_a.concat(piece.generate_special_moves(self))
+      end
     end
   end
 

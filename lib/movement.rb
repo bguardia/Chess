@@ -51,7 +51,7 @@ module Movement
       moves.delete(mv) #remove any previous versions of same moves
     end
 
-    moves << en_passant(pawn, state)
+    #moves << en_passant(pawn, state)
     moves.compact
   end
 
@@ -82,7 +82,7 @@ module Movement
   def king_moves(king, state)
     positions = MovementArray.new(king, state).diagonally(1).or.horizontally(1).or.vertically(1).spaces
     moves = create_moves(positions, king, state)
-    moves.concat(castling(king, state))
+    #moves.concat(castling(king, state))
   end
 
   def knight_moves(knight, state)
@@ -119,11 +119,11 @@ module Movement
       end
 
       if en_passant
-        return Move.new(move: en_passant, type: :en_passant)
+        return [Move.new(move: en_passant, type: :en_passant)]
       end     
     end
 
-    return nil
+    return []
   end
 
   def castling(king, state)
