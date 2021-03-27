@@ -127,7 +127,7 @@ def get_players(args)
     end
 
     num_comps.times do 
-      win = create_box.call("Enter the name of Computer (#{n}:")
+      win = create_box.call("Enter the name of Computer (#{n}):")
       computer_name = InputHandler.new(in: win).get_input
       players << ComputerPlayer.new(name: computer_name)
       n += 1

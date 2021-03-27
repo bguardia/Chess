@@ -1053,9 +1053,33 @@ class TypingField < Window
 
  def default_key_map
    {Keys::ENTER => -> { @break = true},
-    Keys::BACKSPACE => -> { on_backspace }}
+    Keys::BACKSPACE => -> { on_backspace },
+    Keys::LEFT => -> { to_left },
+    Keys::RIGHT => -> { to_right }}
  end
  
+ def to_left
+   x = @win.curx
+   y = @win.cury
+   if x > 0
+     @win.setpos(y, x - 1)
+   end
+ end
+
+ def to_right
+   x = @win.curx
+   y = @win.cury
+   if x < @content.length 
+     @win.setpos(y, x + 1)
+   end
+ end
+
+ def in_bounds?(x , y)
+   if x > 0 && x < @width && y > 0 && y < @width
+     true
+   end
+ end
+
  def set_color
    col = Curses.color_pair(return_c_pair(@fg, @bg))
    @win.attron(col)
@@ -1078,11 +1102,12 @@ class TypingField < Window
        x -= 1
      end
 
-     @win.setpos(y, x)
-     @win.delch
-     @input_to_return = @input_to_return.slice(0, @input_to_return.length - 1)
+     #@win.setpos(y, x)
+     #@win.delch
+     @input_to_return.slice!(x)
      @content = @input_to_return
      update
+     @win.setpos(y, x)
    end
  end
 
@@ -1104,9 +1129,10 @@ class TypingField < Window
 
  def handle_unmapped_input(input)
    #don't echo or add characters to input if there is no space remaining in field
-   if @win.curx < @width -1
+   x = @win.curx
+   if x < @width -1
      @win.addch(input) 
-     @input_to_return += input.to_s
+     @input_to_return[x] = input
      @content = @input_to_return
    end
  end
@@ -1115,8 +1141,8 @@ class TypingField < Window
    @win.attroff(Curses.color_pair(return_c_pair(@fg, @bg)))
    Curses.echo
    @win.keypad(false)
-   @win.erase
-   @win.refresh
+   #@win.erase
+   #@win.refresh
  end
 
 end
@@ -1714,8 +1740,9 @@ module WindowTemplates
                             bg: :black,
                             fg: :white)
 
-    field.merge_key_map({ Keys::DOWN =>->{ field.lose_focus}, 
-                          Keys::ENTER =>->{ field.lose_focus}})
+    field.merge_key_map({ Keys::UP => -> { field.lose_focus },
+                          Keys::DOWN =>->{ field.lose_focus }, 
+                          Keys::ENTER =>->{ field.lose_focus }})
 
     button.set_key_map({ Keys::UP =>->{button.lose_focus},
                          Keys::ENTER =>->{button.input_to_return = field.content
@@ -1723,6 +1750,7 @@ module WindowTemplates
 
     screen.add_region(field)
     screen.update
+    screen.set_active_region(field)
     return screen
   end
 
