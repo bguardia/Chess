@@ -224,12 +224,10 @@ def quit_game(args)
 end
 
 def about_game(args)
-  info = " You want to learn about\n" +
-         "This amazing game and th\n" +
-         "amazing person that made\n" +
-         "it. Great!              \n"
-
-  pop_up(info)
+  info = "You want to learn about the game and the amazing person who made it. That's great! Thank you very much."
+  about_win = WindowTemplates.confirmation_screen(args.merge(content: info, title: "About Game"))
+  about_win.update
+  InputHandler.new(in: about_win).get_input
 end
 
 def settings(args)

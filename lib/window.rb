@@ -537,9 +537,41 @@ class Window
     @border_win.refresh
   end
 
+  def arrayify_str(str)
+    content_w = @width - @padding_left - @padding_right
+    str_arr = []
+    if str.include?("\n")
+      str_arr = str.split("\n")
+    else
+      i = 0
+      loop do
+        eol = i + content_w < str.length ? i + content_w : str.length - 1
+        str_arr << str[i..eol]
+        i = eol + 1
+        break if i >= str.length
+      end
+    end
+    
+    #Go over each line of string array, checking current and next lines
+    #If current string is too long, or a word is broken up between both strings,
+    #cut the overflow from current string and place it at beginning of next string
+    str_arr.each_index do |l|
+      cur_line = str_arr[l]
+      next_line = l + 1 < str_arr.length ? str_arr[l + 1].to_s : ""
+      
+      if cur_line.length > content_w || (( next_line[0] != " " && next_line[0] != nil ) && cur_line[-1] != " " )
+         overflow = cur_line.slice!(/\s[[:graph:]]+$/).to_s #turn to string in case of nil returns
+         str_arr[l + 1] = next_line.insert(0, overflow)
+      end
+
+    end
+
+    return str_arr
+  end
+
   def win_update
     if @content.kind_of?(String)
-      to_print = @content.split("\n")
+      to_print = arrayify_str(@content)
     else
       to_print = @content
     end
