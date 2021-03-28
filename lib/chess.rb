@@ -174,46 +174,25 @@ end
 
 def load_save(args)
  SaveHelper.load_saves
- actions = []
  content = []
+ actions = []
  SaveHelper.saves.each do |save|
    content << save.to_s
-   if save.kind_of?(EmptySave)
-     actions << ->{}
-   else
-     action = -> { game = Game.new; game.load(save.data); init_game_ui(game); game.start }
-     actions << action
-   end 
  end
-=begin
- load_menu = WindowTemplates.menu_two(height:35,
-                                      width: 55,
-                                      top: 5,
-                                      left: 5,
-                                      lines: 3,
-                                      item_padding: 1,
-                                      content: content,
-                                      actions: actions,
-                                      title: "Load Save")
-=end
-=begin
- load_menu = WindowTemplates.menu_two(args.merge(height: 35,
-                                                 width: 55,
-                                                 top: (Curses.lines - 35)/2,
-                                                 left: (Curses.cols - 55)/2,
-                                                 lines: 3, 
-                                                 content: content, 
-                                                 actions: actions, 
-                                                 title: "Load Save", 
-                                                 item_padding: 1))
-=end
 
  load_menu = WindowTemplates.save_menu(title: "Load Save",
                                        content: content,
                                        actions: actions)
  load_menu.update
- InputHandler.new(in: load_menu).get_input
-
+ game_to_load = InputHandler.new(in: load_menu).get_input
+ 
+ if game_to_load
+   game = Game.new
+   save = SaveHelper.saves[game_to_load]
+   game.load(save.data)
+   init_game_ui(game)
+   game.start
+ end
 end
 
 def quit_game(args)

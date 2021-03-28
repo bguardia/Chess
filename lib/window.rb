@@ -936,10 +936,6 @@ class Menu < List
       Keys::ENTER => -> { select }}
   end
 
-  def line_increment
-    @height/@num_lines + @item_padding
-  end
-
   def to_up
     if @pos_y - 1 >= 0
       @pos_y -= 1
@@ -967,7 +963,7 @@ class Menu < List
   end
 
   def get_line_color(line_num)
-    if @in_focus && line_num == @pos_y * line_increment
+    if @in_focus && line_num == @pos_y
       col = @selected_col
     else
       col = @unselected_col 
@@ -983,13 +979,14 @@ class Menu < List
   def win_update
     #gets the last @num_lines lines of @content (or all if length < @num_lines)
     y = 0
+    pos_y = 0
     @win.erase
     @content.each do |item|
       line_arr = item.split("\n")
       item_height = line_arr.length
 
       @win.setpos(y,0)
-      c_pair = get_line_color(y)
+      c_pair = get_line_color(pos_y)
       c_num = return_c_pair(c_pair[0], c_pair[1]) 
       col = Curses.color_pair(c_num)
       @win.attron(col)
@@ -1004,7 +1001,7 @@ class Menu < List
         @win.addstr("\n")
         y += 1
       end
-
+      pos_y += 1
       break if y >= @height
     end
     @win.refresh
