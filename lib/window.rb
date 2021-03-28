@@ -1001,6 +1001,7 @@ class Menu < List
         @win.addstr("\n")
         y += 1
       end
+
       pos_y += 1
       break if y >= @height
     end
@@ -1487,8 +1488,8 @@ module WindowTemplates
                                 width: 15,
                                 top: 0,
                                 left: 0,
-                                border_top: "-",
-                                border_side: "|",
+                                btn_border_top: "-",
+                                btn_border_side: "|",
                                 padding: 1,
                                 padding_top: 1,
                                 padding_left: 1,
@@ -1847,7 +1848,7 @@ module WindowTemplates
     
 
     #Create button set
-    btn_t = win_t + win_h - 5
+    btn_t = win_t + win_h - 5 - 1
     btn_l = win_l + padding_left
     btn_w = win_w - padding_left - padding_right
     button_set = self.button_set(top: btn_t,
@@ -2033,7 +2034,8 @@ module WindowTemplates
 
     default_button_settings = { height: btn_h,
                                 width: win_w - padding * 2,
-                                top: win_t + win_h - btn_h,
+                                top: win_t + win_h - btn_h - 1,
+                                border_side: "|",
                                 left: win_l + padding_left,
                                 buttons: buttons }
 
