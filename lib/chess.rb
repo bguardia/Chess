@@ -196,7 +196,7 @@ def load_save(args)
                                       actions: actions,
                                       title: "Load Save")
 =end
-
+=begin
  load_menu = WindowTemplates.menu_two(args.merge(height: 35,
                                                  width: 55,
                                                  top: (Curses.lines - 35)/2,
@@ -206,6 +206,11 @@ def load_save(args)
                                                  actions: actions, 
                                                  title: "Load Save", 
                                                  item_padding: 1))
+=end
+
+ load_menu = WindowTemplates.save_menu(title: "Load Save",
+                                       content: content,
+                                       actions: actions)
  load_menu.update
  InputHandler.new(in: load_menu).get_input
 

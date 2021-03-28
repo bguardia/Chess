@@ -1596,9 +1596,9 @@ module WindowTemplates
 
     btn_title = args.fetch(:btn, nil) || "Cancel"
     btn_h = 3
-    btn_w = win_w - (padding * 2)#btn_title.length
-    btn_t = win_t + win_h - btn_h + padding #bottom-aligned
-    btn_l = win_l + ((win_w - btn_w) / 2) + padding   #centered
+    btn_w = args.fetch(:btn_width, nil) || btn_title.length + (padding * 2) #btn_title.length
+    btn_t = args.fetch(:btn_t, nil) || win_t + win_h - btn_h  - padding_bottom #bottom-aligned
+    btn_l = win_l + ((win_w - btn_w) / 2)   #centered
 
     btn_padding = args.fetch(:btn_padding, nil) || 1
 
@@ -1615,7 +1615,8 @@ module WindowTemplates
 
     $game_debug += "Created menu button\n"
 
-    menu_h = win_h - btn_h - title_h
+    menu_h = win_h - title_h - padding_top - padding_bottom
+    menu_h = btn_t < win_h + win_t ? menu_h + (btn_t - win_t - win_h) : menu_h #only subtract button height from menu width if button is inside window
     menu_w = win_w - (padding * 2)
     menu_t = title_h + title_t
     menu_l = win_l + padding_left
@@ -1665,7 +1666,9 @@ module WindowTemplates
                          left: (Curses.cols - 55)/2,
                          lines: 3, 
                          title: "Load Save", 
-                         item_padding: 1 }
+                         item_padding: 1,
+                         btn_width: 55,
+                         btn_t: (Curses.lines - 35)/2 +35 }
 
     args = default_settings.merge(args)
 
