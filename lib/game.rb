@@ -36,8 +36,8 @@ class Game < Saveable
 
  def set_gamestate
   pieces = create_sets.flatten
-  $game_debug += "called set_gamestate\n"
-  $game_debug += "pieces: \n#{pieces}"
+  #$game_debug += "called set_gamestate\n"
+  #$game_debug += "pieces: \n#{pieces}"
   StateTree.new(pieces: pieces)
  end
 
@@ -76,12 +76,12 @@ class Game < Saveable
  end
 
  def break_game_loop
-   $game_debug += "Called break_game_loop\n"
+   #$game_debug += "Called break_game_loop\n"
    @break_game_loop = true
  end
 
  def game_over?
-   $game_debug += "Called game_over? \n"
+   #$game_debug += "Called game_over? \n"
    return @gamestate.checkmate?(@current_player.team)
  end
 
@@ -134,20 +134,20 @@ class Game < Saveable
      @io_stream.update
      player_turn
      break if @break_game_loop
-     $game_debug += "play loop not broken\n"
+     #$game_debug += "play loop not broken\n"
      change_current_player
      game_over = game_over?
      update_turn_num
    end
 
-   $game_debug += "Broke out of play loop\n"
+   #$game_debug += "Broke out of play loop\n"
 
    unless @break_game_loop
      @message_input << "Checkmate. #{@current_player.team.capitalize} loses."
      @io_stream.update
      @io_stream.get_input
    else
-     $game_debug += "Broke game loop and closed io_stream\n"
+     #$game_debug += "Broke game loop and closed io_stream\n"
      @io_stream.close
    end
  end
@@ -558,9 +558,9 @@ module ChessNotation
    end
 
    def self.from_notation(note, state)
-     $game_debug += "note before clean: #{note}\n"
+     #$game_debug += "note before clean: #{note}\n"
      note = clean(note)
-     $game_debug += "note after clean: #{note}\n"
+     #$game_debug += "note after clean: #{note}\n"
      return nil if note.nil?
 
      #If castle notation, run separate function

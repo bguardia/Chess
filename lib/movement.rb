@@ -127,9 +127,9 @@ module Movement
   end
 
   def castling(king, state)
-    $game_debug += "called castling\n"
+    #$game_debug += "called castling\n"
     in_check = state.in_check?(king: king)
-    $game_debug += "in_check is: #{in_check}\n"
+    #$game_debug += "in_check is: #{in_check}\n"
     unless state.get_moved_status(king) || in_check
       castles = []
       rooks = state.get_pieces(type: "Rook", team: king.team, moved: false)
@@ -171,7 +171,7 @@ module Movement
             end
           end
           
-          $game_debug += "attackable is: #{attackable}\n"
+          #$game_debug += "attackable is: #{attackable}\n"
           unless attackable
           castles << Move.new(move: [[king, king.current_pos, king_dest],
                                      [rook, rook.current_pos, rook_dest]],
@@ -475,14 +475,14 @@ module Movement
 
   def self.who_can_reach?(pos, board, args = {})
     pieces = board.get_pieces(args)
-    $game_debug += "pieces: #{pieces}\n"
+    #$game_debug += "pieces: #{pieces}\n"
     pieces.filter! do |piece|
       can_reach = piece.can_reach?(pos)
-      $game_debug += "for #{piece.class} (#{piece.id}): can_reach is #{can_reach}\n"
+      #$game_debug += "for #{piece.class} (#{piece.id}): can_reach is #{can_reach}\n"
       can_reach
     end
 
-    $game_debug += "pieces is now: #{pieces}\n"
+    #$game_debug += "pieces is now: #{pieces}\n"
     return pieces
   end
 

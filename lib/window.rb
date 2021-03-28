@@ -499,11 +499,11 @@ class Window
   end
 
   def create_win
-    $game_debug += "Called create_win\n"
+    #$game_debug += "Called create_win\n"
     @border_win = Curses::Window.new(@height, @width, @top, @left)
     
     if border_top && border_side
-      $game_debug += "border_top is: #{border_top}, border_side is: #{border_side}\n"
+      #$game_debug += "border_top is: #{border_top}, border_side is: #{border_side}\n"
       @border_win.box(border_side, border_top)
     end
     @border_win.refresh
@@ -654,7 +654,7 @@ class InteractiveScreen < Screen
       @active_region.before_get_input
     end
 
-    $game_debug += "Active Region is now: #{@active_region.class}\n"
+    #$game_debug += "Active Region is now: #{@active_region.class}\n"
     return @active_region
   end
 
@@ -698,7 +698,7 @@ class InteractiveScreen < Screen
 
   def check_focus
     if active_region.focus == false 
-      $game_debug += "Active region: #{active_region.class}.focus is false. Changing region.\n"
+      #$game_debug += "Active region: #{active_region.class}.focus is false. Changing region.\n"
       change_active_rgn
     end
   end
@@ -958,7 +958,7 @@ class Menu < List
     @item_padding = args.fetch(:item_padding, nil) || 0
     @key_map = default_key_map.merge(args.fetch(:key_map, {}))
 
-    $game_debug += "Menu contents (length: #{@content.length}) are: #{@content}\n"
+    #$game_debug += "Menu contents (length: #{@content.length}) are: #{@content}\n"
     update
   end
 
@@ -1340,18 +1340,15 @@ class Button < Window
     @highlighted = false
     @action = args.fetch(:action, nil) || Proc.new { @break = true }
     @key_map = default_key_map.merge(args.fetch(:key_map, {}))
-    $game_debug += "Button initialized. @col1: #{@col1}, @col2: #{@col2}, @highlighted: #{@highlighted}\n"
+    #$game_debug += "Button initialized. @col1: #{@col1}, @col2: #{@col2}, @highlighted: #{@highlighted}\n"
   end
 
   def default_key_map
-    { Keys::ENTER => ->{ press 
-                         $game_debug += "Pressed enter in button\n" },
+    { Keys::ENTER => ->{ press },
       Keys::UP => ->{ lose_focus
-                      update
-                      $game_debug += "Pressed up in button\n" },
+                      update },
       Keys::DOWN => ->{ lose_focus
-                        update 
-                        $game_debug += "Pressed down in button\n" } }
+                        update } }
   end
 
   def press
@@ -1607,7 +1604,7 @@ module WindowTemplates
                                         border_top: "-",
                                         border_side: "|")
 
-    $game_debug += "Created menu screen\n"
+    #$game_debug += "Created menu screen\n"
     title_h = 3
     title_w = win_w - (padding * 2)
     title_t = win_t + padding_top
@@ -1622,7 +1619,7 @@ module WindowTemplates
                             content: title,
                             padding: title_padding)
 
-    $game_debug += "Created menu title\n"
+    #$game_debug += "Created menu title\n"
 
     btn_title = args.fetch(:btn, nil) || "Cancel"
     btn_h = 3
@@ -1643,7 +1640,7 @@ module WindowTemplates
                                      border_top: "-",
                                      border_side: "|")
 
-    $game_debug += "Created menu button\n"
+    #$game_debug += "Created menu button\n"
 
     menu_h = win_h - title_h - padding_top - padding_bottom
     menu_h = btn_t < win_h + win_t ? menu_h + (btn_t - win_t - win_h) : menu_h #only subtract button height from menu width if button is inside window
@@ -1674,16 +1671,11 @@ module WindowTemplates
                     col1: col1,
                     col2: col2)
 
-    menu.merge_key_map(Keys::ENTER => ->{ menu.input_to_return = menu.selected; menu_screen.break; $game_debug += "pressed enter in menu. menu.selected: #{menu.selected}"})
-    $game_debug += "menu key map is: #{menu.key_map}\n"
-    $game_debug += "Created menu\n"
+    menu.merge_key_map(Keys::ENTER => ->{ menu.input_to_return = menu.selected; menu_screen.break; })
 
     menu_screen.add_region(menu_title)
-    $game_debug += "Added title to menu screen\n"
     menu_screen.add_region(menu_cancel_button)
-    $game_debug += "Added menu button to menu screen\n"
     menu_screen.add_region(menu)
-    $game_debug += "Added menu to menu screen\n"
 
     menu_screen.set_active_region(menu)
     return menu_screen
@@ -1702,7 +1694,6 @@ module WindowTemplates
 
     args = default_settings.merge(args)
 
-    $game_debug += "called WindowTemplates.save_menu.\nargs are:#{args}\n"
     self.menu_two(args)
 
   end
@@ -1982,8 +1973,8 @@ module WindowTemplates
     board_color = args.fetch(:board_color, nil) || :b_magenta
     bg_map = self.game_board_bg_map(col3: board_color)
     fg_map = self.game_board_fg_map(col3: board_color)
-    $game_debug += "bg_map is: #{bg_map}"
-    $game_debug += "fg_map is: #{fg_map}"
+    #$game_debug += "bg_map is: #{bg_map}"
+    #$game_debug += "fg_map is: #{fg_map}"
     arr = args.fetch(:board).arr 
  
     top = args.fetch(:top, (Curses.lines - arr.length) /2)
@@ -2079,7 +2070,7 @@ module WindowTemplates
       else
         to_return = 0
       end
-      rgn.merge_key_map(Keys::ENTER => ->{ rgn.input_to_return = to_return; screen.break; $game_debug += "called btn enter key map\n" })
+      rgn.merge_key_map(Keys::ENTER => ->{ rgn.input_to_return = to_return; screen.break})
     end
 
     content = args.fetch(:content, nil) || ""

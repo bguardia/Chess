@@ -528,11 +528,11 @@ class State < Saveable
       if exists && @pieces[piece][:moves]
         mv_len = @pieces[piece][:moves].to_a.length
         var_type = @pieces[piece][:moves].class
-        $game_debug += "piece: #{piece.team} #{piece.class} (#{piece.id}), moves length: #{mv_len}, class: #{var_type}\n"
+        #$game_debug += "piece: #{piece.team} #{piece.class} (#{piece.id}), moves length: #{mv_len}, class: #{var_type}\n"
         special_moves = piece.generate_special_moves(self)
         spmv_len = special_moves.to_a.length
         spvar_type = special_moves.class
-        $game_debug += "special_moves length is: #{spmv_len}, class: #{spvar_type}\n"
+        #$game_debug += "special_moves length is: #{spmv_len}, class: #{spvar_type}\n"
         @pieces[piece][:moves].to_a.concat(piece.generate_special_moves(self))
       end
     end

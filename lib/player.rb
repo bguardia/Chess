@@ -196,7 +196,7 @@ module ComputerAI
     moves.each do |mv|
       state.do!(mv)
       score = min(state, depth - 1)
-      $game_debug += "move (score: #{score}): #{mv}\n"
+      #$game_debug += "move (score: #{score}): #{mv}\n"
       state.undo
       if score > max_value
         best_move = mv
@@ -204,7 +204,7 @@ module ComputerAI
       end
     end
 
-    $game_debug += "Selected move was: #{best_move} (score: #{max_value})"
+    #$game_debug += "Selected move was: #{best_move} (score: #{max_value})"
     return best_move    
   end
 
@@ -348,43 +348,3 @@ class InputHandler
     @requested || @interactive.return_input
   end
 end
-
-=begin
-  Actual module in lib/window.rb
-  Just here for comparison with InputHandler, which takes InteractiveWindows
-  module InteractiveWindow
-    #A module that allows an input source to interactive with input handler
-    #The default methods are an example of using $stdin
-    def interactive
-      true
-    end
-
-    #Stores any special keys used by a paticular context
-    #(Will be over-ridden by arguments passed to input_handler)
-    def key_map
-      {}
-    end
-
-    #Called during InputHandler's get_input loop
-    def before_get_input; end
-    def post_get_input; end
-    def get_input
-      @input_to_return = gets.chomp #Wrap gets or win.getch so other objects don't need to know the difference
-    end
-
-    #Method to handle returned input if the input is not a special character
-    def handle_unmapped_input(input); end
-
-    def break_condition
-      true #Because gets.chomp returns input as soon as entered is pressed, loop should automatically break
-    end
-
-    #Add new context based on key press
-    def update_key_map; end
-
-    #A way for window/io to return its input
-    def return_input
-      @input_to_return
-    end
-  end
-=end
