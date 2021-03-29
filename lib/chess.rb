@@ -173,6 +173,9 @@ def init_game_ui(game, args = {})
 end
 
 def load_save(args)
+ col1 = args.fetch(:col1, nil) || [:white, :black]
+ col2 = args.fetch(:col2, nil) || [:red, :yellow]
+
  SaveHelper.load_saves
  content = []
  actions = []
@@ -182,7 +185,11 @@ def load_save(args)
 
  load_menu = WindowTemplates.save_menu(title: "Load Save",
                                        content: content,
-                                       actions: actions)
+                                       actions: actions,
+                                       col1: col1,
+                                       col2: col2,
+                                       fg: col1[0],
+                                       bg: col1[1])
  load_menu.update
  game_to_load = InputHandler.new(in: load_menu).get_input
  
@@ -287,7 +294,7 @@ def start_menu(args)
   Menu.new(args.merge({content: content, actions: actions}))
 end
 
-def title_screen
+def title_screen(args = {})
   #Get Chess ascii art from title.txt
   title_file = File.open("title.txt")
   title_image = title_file.readlines 
@@ -299,16 +306,17 @@ def title_screen
   padding = 2
   height = title_image.length + padding * 2
   width = title_image[0].length + padding * 2
-  top = 3
+  top = args.fetch(:top, nil) || 3
   left = (Curses.cols - width - padding * 2) / 2
+  col1 = args.fetch(:col1, nil) || [:white, :black]
   Window.new(height: height,
              width: width,
              content: title_image,
              padding: padding,
-             top: 3,
+             top: top,
              left: left,
-             bg: :black,
-             fg: :white,
+             fg: col1[0],
+             bg: col1[1],
              border_top: "-",
              border_side: "|") 
 end
@@ -323,11 +331,12 @@ begin
 
   Settings.load
 
+
   pad = 2
-  def_h = 15 + pad * 2
-  def_w = 40 + pad * 2
-  def_t = (Curses.lines - def_h) / 2
-  def_l = (Curses.cols - def_w) / 2
+  def_h = h < 40 ? h/2 : 15 + pad * 2
+  def_w = w < 88 ? w/2 : 40 + pad * 2
+  def_t = h < 40 ? h/2 : (h - def_h) / 2
+  def_l = (w - def_w) / 2
   col1 = [:white, Settings.get("bkgd_color").to_sym]
   col2 = [:red, :yellow]
   fg = col1[0]
@@ -345,11 +354,15 @@ begin
                        :border_top => "-",
                        :border_side => "|"}
 
+  
 
   bkgd_color = Settings.get("bkgd_color").to_sym
   screen = InteractiveScreen.new(height: h, width: w, top: 0, left: 0, fg: :white, bg: bkgd_color, bkgd: " ")
   
-  screen.add_region(title_screen)
+  title_top = h < 40 ? 0 : 3
+  title_args = default_win_size.merge(top: title_top)
+
+  screen.add_region(title_screen(title_args))
   screen.add_region(start_menu(default_win_size))
   screen.update
   input_handler = InputHandler.new(in: screen)

@@ -532,7 +532,9 @@ class Window
       y += 1
     end
     if border_top && border_side
-      @border_win.box(border_side, border_top)
+      @border_win.attron(col) do 
+        @border_win.box(border_side, border_top)
+      end 
     end
     @border_win.refresh
   end
@@ -572,15 +574,20 @@ class Window
   def win_update
     if @content.kind_of?(String)
       to_print = arrayify_str(@content)
+    elsif @content.nil?
+      to_print = @content.to_a
     else
       to_print = @content
     end
 
+    col = Curses.color_pair(return_c_pair(@fg, @bg))
     y = 0
-    to_print.each do |line|
-      @win.setpos(y,0)
-      @win.addstr(line)
-      y += 1
+    @win.attron(col) do 
+      to_print.each do |line|
+        @win.setpos(y,0)
+        @win.addstr(line.ljust(@width))
+        y += 1
+      end
     end
     
     @win.refresh
@@ -953,8 +960,8 @@ class Menu < List
     @actions = args.fetch(:actions) #a 2D array containing a string to display and a lambda to call = ["Start Game", ->{ game_start}]
     @pos_y = 0
     @break_on_select = args.fetch(:break_on_select, true) 
-    @selected_col = args.fetch(:col2, nil)
-    @unselected_col = args.fetch(:col1, nil)
+    @col2 = args.fetch(:col2, nil)
+    @col1 = args.fetch(:col1, nil)
     @item_padding = args.fetch(:item_padding, nil) || 0
     @key_map = default_key_map.merge(args.fetch(:key_map, {}))
 
@@ -996,9 +1003,9 @@ class Menu < List
 
   def get_line_color(line_num)
     if @in_focus && line_num == @pos_y
-      col = @selected_col
+      col = @col2
     else
-      col = @unselected_col 
+      col = @col1 
     end
   end
 
@@ -1029,14 +1036,30 @@ class Menu < List
       end
       @win.attroff(col)
 
-      @item_padding.times do
-        @win.addstr("\n")
-        y += 1
+      c_num = return_c_pair(@col1[0], @col1[1])
+      col = Curses.color_pair(c_num)
+      @win.attron(col) do
+        @item_padding.times do
+          @win.addstr(" " * @width)
+          y += 1
+        end
       end
 
       pos_y += 1
       break if y >= @height
     end
+
+    #Fill in menu color if there are lines remaining
+    if y < @height
+      c_num = return_c_pair(@fg, @bg)
+      col = Curses.color_pair(c_num)
+      @win.attron(col) do
+        (@height - y).times do
+          @win.addstr( @bkgd * @width )
+        end
+      end
+    end
+        
     @win.refresh
   end
 
@@ -1336,6 +1359,8 @@ class Button < Window
 
   def post_initialize(args)
     @col1 = args.fetch(:col1, nil)
+    @fg = @col1[0]
+    @bg = @col1[1]
     @col2 = args.fetch(:col2, nil)
     @highlighted = false
     @action = args.fetch(:action, nil) || Proc.new { @break = true }
@@ -1389,13 +1414,182 @@ class Button < Window
     c_num = return_c_pair(c_pair[0], c_pair[1]) 
     col = Curses.color_pair(c_num)
     @win.attron(col)
-    @win.addstr(@content)
+    @win.addstr(@content.ljust(@width))
     @win.attroff(col)
     @win.refresh
   end
 end
 
 module WindowTemplates
+
+  def self.screen_height
+    @@screen_height ||= Curses.lines
+  end
+
+  def self.screen_width
+    @@screen_width ||= Curses.cols
+  end
+
+  def self.fullscreen_window_settings
+    { height: self.screen_height,
+      width: self.screen_width,
+      top: 0,
+      left: 0 }
+  end
+
+  def self.default_window_settings
+    screen_h = self.screen_height
+    screen_w = self.screen_width
+
+    pad = 2
+    def_h = screen_h < 40 ? screen_h/2 : 15 + pad * 2
+    def_w = screen_w < 88 ? screen_w/2 : 40 + pad * 2
+    def_t = (screen_h - def_h) / 2
+    def_l = (screen_w - def_w) / 2
+    col1 = [:white, Settings.get("bkgd_color").to_sym]
+    col2 = [:red, :yellow]
+    fg = col1[0]
+    bg = col1[1]
+
+    border_top = "-"
+    border_side = "|"
+
+    default_win_size = { :screen_h => screen_h,
+                         :screen_w => screen_w,
+                         :height => def_h,
+                         :width => def_w,
+                         :top => def_t,
+                         :left => def_l,
+                         :padding => pad,
+                         :col1 => col1,
+                         :col2 => col2,
+                         :fg => fg,
+                         :bg => bg,
+                         :border_top => border_top,
+                         :border_side => border_side }
+
+  end
+
+  def self.create_subhash(hash, key_substr)
+    #pull values from hash that contain key_substr and
+    #create new hash where each key has key_substr removed
+
+    subhash = hash.transform_keys do |key|
+      key_str = key.to_s
+      if key_str.start_with?(key_substr)
+        key_str.sub("#{key_substr}_", "").to_sym #remove substr and underscore from key
+      else
+        :to_delete #mark all other keys for deletion from subhash
+      end 
+    end
+
+    subhash.delete(:to_delete)
+
+    return subhash
+  end
+
+  def self.default_btn_set_settings(args = {})
+    padding = args.fetch(:btn_set_padding, nil) || 1
+    win_padding = args.fetch(:padding, nil) || 1
+    win_width = args.fetch(:width, nil)
+    width = win_width ? win_width - win_padding * 2 : 10
+    height = self.default_button_settings[:btn_height] + padding * 2
+    col1 = args.fetch(:col1, nil) || [:white, :black]
+    col2 = args.fetch(:col2, nil) || [:red, :yellow]
+
+     { btn_set_width: width,
+       btn_set_height: height,
+       btn_set_padding: padding,
+       btn_set_padding_left: padding,
+       btn_set_padding_right: padding,
+       btn_set_padding_bottom: padding,
+       btn_set_padding_top: padding,
+       #btn_set_border_top: "",
+       #btn_set_border_bottom: "",
+       btn_set_col1: col1,
+       btn_set_fg: col1[0],
+       btn_set_bg: col1[1],
+       btn_set_col2: col2,
+       btn_set_top: 0,
+       btn_set_left: 0 }  
+  end
+
+  def self.default_button_settings(args = {})
+    #Create default button settings based on content of button
+    content = args.fetch(:btn_content, nil) || "OK"
+    padding = args.fetch(:btn_padding, nil) || 1
+    col1 = args.fetch(:col1, nil) || [:white, :black]
+    col2 = args.fetch(:col2, nil) || [:red, :yellow]
+
+    { btn_padding: padding,
+      btn_padding_left: padding,
+      btn_padding_right: padding,
+      btn_padding_bottom: padding,
+      btn_padding_top: padding,
+      btn_height: 1 + padding * 2,
+      btn_width: content.length + padding * 2 + 2,
+      btn_border_top: "-",
+      btn_border_side: "|",
+      btn_col1: col1,
+      btn_col2: col2,
+      btn_top: 0,
+      btn_left: 0 }
+  end
+
+  def self.default_title_settings(args = {})
+    padding = args.fetch(:title_padding, nil) || 1
+    title = args.fetch(:title_content, nil) || "Window"
+    width = args.fetch(:width, nil) || title.length + padding * 2
+    col1 = args.fetch(:col1, nil) || [:white, :black]
+    col2 = args.fetch(:col2, nil) || [:red, :yellow]
+
+    { title_padding: padding,
+      title_padding_left: padding,
+      title_padding_right: padding,
+      title_padding_bottom: padding,
+      title_padding_top: padding,
+      title_height: 1 + padding * 2,
+      title_width: width,
+      #title_border_top: "",
+      #title_border_side: "",
+      title_col1: col1,
+      title_col2: col2,
+      title_fg: col1[0],
+      title_bg: col1[1],
+      title_top: 0,
+      title_left: 0 } 
+  end
+
+  def self.default_menu_settings(args = {})
+=begin
+    win_padding_left = args.fetch(:padding_left, nil) || args.fetch(:padding)
+    win_padding_right = args.fetch(:padding_right, nil) || args.fetch(:padding)
+    width = args.fetch(:width) - win_padding_left - win_padding_right
+    left = args.fetch(:left) + win_padding_left
+=end
+    content = args.fetch(:menu_content, nil).to_a
+    height = content.length
+    padding = args.fetch(:menu_padding, nil) || 1
+    col1 = args.fetch(:col1, nil) || [:white, :black]
+    col2 = args.fetch(:col2, nil) || [:red, :yellow]
+
+    { menu_padding: padding,
+      menu_padding_left: padding,
+      menu_padding_right: padding,
+      menu_padding_bottom: padding,
+      menu_padding_top: padding,
+      menu_line_padding: 1,
+      menu_width: 10,
+      menu_height: height,
+      menu_border_top: "-",
+      menu_border_side: "|",
+      menu_col1: col1,
+      menu_col2: col2,
+      menu_fg: col1[0],
+      menu_bg: col1[1],
+      menu_top: 0,
+      menu_left: 0 }
+  end
 
   def self.pop_up(window)
     #initiates a window that disappears after receiving input
@@ -1498,8 +1692,10 @@ module WindowTemplates
     btn_set_top = screen.top + screen.height - 5
     button_set = self.button_set(buttons: button_arr,
                                  width: screen.width,
-                                 top: btn_set_top,
-                                 left: screen.left)
+                                 btn_set_top: btn_set_top,
+                                 btn_set_left: screen.left,
+                                 col1: args.fetch(:col1),
+                                 col2: args.fetch(:col2))
 
 
     #add title and buttons to screen
@@ -1513,6 +1709,7 @@ module WindowTemplates
   end
 
   def self.button_set(args = {})
+=begin
     default_window_settings = { height: 5,
                                 width: 15,
                                 top: 0,
@@ -1527,24 +1724,32 @@ module WindowTemplates
                                 key_map: { Keys::LEFT => "to_previous" ,
                                            Keys::RIGHT => "to_next" }}
 
+=end
+
     #Create Button Window
-    args = default_window_settings.merge(args)
-    btn_window = InteractiveScreen.new(args)
+    btn_set_default = self.default_btn_set_settings(args).merge(args)
+    btn_set_args = self.create_subhash(btn_set_default, "btn_set")
+    $game_debug += "btn_set_args:\n#{btn_set_args}\n"
+    btn_window = InteractiveScreen.new(btn_set_args)
+
+    #set button set key map
+    btn_window.merge_key_map(Keys::LEFT => ->{ btn_window.to_previous },
+                             Keys::RIGHT => ->{ btn_window.to_next })
 
     #Collect window settings for button calculations
-    win_h = args.fetch(:height)
-    win_w = args.fetch(:width)
-    win_t = args.fetch(:top)
-    win_l = args.fetch(:left)
-    padding_left = args.fetch(:padding_left)
-    padding_right = args.fetch(:padding_right)
-    padding_top = args.fetch(:padding_top)
-    padding_bottom = args.fetch(:padding_bottom)
-    padding = args.fetch(:padding)
+    win_h = btn_set_args[:height] #args.fetch(:height)
+    win_w = btn_set_args[:width] #args.fetch(:width)
+    win_t = btn_set_args[:top] #args.fetch(:top)
+    win_l = btn_set_args[:left] #args.fetch(:left)
+    padding_left = btn_set_args[:padding_left] #args.fetch(:padding_left)
+    padding_right = btn_set_args[:padding_right] #args.fetch(:padding_right)
+    padding_top = btn_set_args[:padding_top] #args.fetch(:padding_top)
+    padding_bottom = btn_set_args[:padding_bottom] #args.fetch(:padding_bottom)
+    padding = btn_set_args[:padding] #args.fetch(:padding)
 
     button_arr = args.fetch(:buttons, nil) || []
     num_btns = button_arr.length
-
+=begin
     btn_h = 3
     btn_padding = 1
     btn_str_len = button_arr.reduce(0) { |longest, arr| arr[0].length > longest ? arr[0].length : longest }
@@ -1553,23 +1758,32 @@ module WindowTemplates
     btn_padding_left = (win_w - (padding_left + padding_right) - (btn_w * num_btns)) / (num_btns + 1) #automatically rounds down
     btn_padding_top = (win_h - (padding_top + padding_bottom) - btn_h) / 2
     btn_t = win_t + padding_top + btn_padding_top
-
     btn_border_top = args.fetch(:btn_border_top, nil) || args.fetch(:border_top, nil)
     btn_border_side = args.fetch(:btn_border_side, nil) || args.fetch(:border_side, nil)
+=end
     btn_count = 0
+    longest_content = button_arr.reduce("") { |longest, arr| arr[0].length > longest.length ? arr[0] : longest }
+    btn_default = self.default_button_settings(btn_set_args.merge(btn_content: longest_content)).merge(btn_set_args)
+    btn_args = self.create_subhash(btn_default, "btn")
+    btn_w = btn_args[:width]
+    btn_h = btn_args[:height]
+    btn_padding_left = (win_w - (padding_left + padding_right) - (btn_w * num_btns)) / (num_btns + 1) #automatically rounds down
+    btn_padding_top = (win_h - (padding_top + padding_bottom) - btn_h) / 2
+    btn_t = win_t + padding_top + btn_padding_top
     button_arr.each do |btn_arr|
       btn_l = win_l + padding_left + (btn_padding_left * (btn_count + 1)) + btn_w * btn_count 
-      btn = Button.new(height: btn_h,
-                       width: btn_w,
+      btn = Button.new(btn_args.merge(#height: btn_h,
+                       #width: btn_w,
                        top: btn_t,
                        left: btn_l,
-                       padding: btn_padding,
+                       #padding: btn_padding,
                        content: btn_arr[0],
                        action: btn_arr[1],
-                       col1: [:white, :black],
-                       col2: [:red, :yellow],
-                       border_top: btn_border_top,
-                       border_side: btn_border_side)
+                       #col1: [:white, :black],
+                       #col2: [:red, :yellow],
+                       #border_top: btn_border_top,
+                       #border_side: btn_border_side,
+                       key_map: {}))
 
       btn_window.add_region(btn)
       btn_count += 1
@@ -1596,13 +1810,13 @@ module WindowTemplates
     padding_right = args.fetch(:padding_right, nil) || padding
     padding_bottom = args.fetch(:padding_bottom, nil) || padding
 
-    menu_screen = InteractiveScreen.new(height: win_h,
-                                        width: win_w,
-                                        top: win_t,
-                                        left: win_l,
-                                        padding: padding,
-                                        border_top: "-",
-                                        border_side: "|")
+    menu_screen = InteractiveScreen.new(args.merge(#height: win_h,
+                                                   #width: win_w,
+                                                   #top: win_t,
+                                                   #left: win_l,
+                                                   #padding: padding,
+                                                   border_top: "-",
+                                                   border_side: "|"))
 
     #$game_debug += "Created menu screen\n"
     title_h = 3
@@ -1611,13 +1825,15 @@ module WindowTemplates
     title_l = win_l + padding_left
     title = args.fetch(:title, nil) || "Load Save"
     title_padding = args.fetch(:title_padding, nil) || 1
-
-    menu_title = Window.new(height: title_h,
+    
+    default_title_settings = self.default_title_settings(args).merge(args)
+    title_args = self.create_subhash(default_title_settings, "title")
+    menu_title = Window.new(title_args.merge(#height: title_h,
                             width: title_w,
                             top: title_t,
                             left: title_l,
                             content: title,
-                            padding: title_padding)
+                            padding: title_padding))
 
     #$game_debug += "Created menu title\n"
 
@@ -1628,17 +1844,18 @@ module WindowTemplates
     btn_l = win_l + ((win_w - btn_w) / 2)   #centered
 
     btn_padding = args.fetch(:btn_padding, nil) || 1
-
-    menu_cancel_button =  Button.new(height: btn_h,
+    default_button_settings = self.default_button_settings(args).merge(args)
+    btn_args = self.create_subhash(default_button_settings, "btn")
+    menu_cancel_button =  Button.new(btn_args.merge(height: btn_h,
                                      width: btn_w,
                                      top: btn_t,
                                      left: btn_l,
                                      content: btn_title,
-                                     col1: col1,
-                                     col2: col2,
-                                     padding: btn_padding,
-                                     border_top: "-",
-                                     border_side: "|")
+                                     #col1: col1,
+                                     #col2: col2,
+                                     padding: btn_padding))
+                                     #border_top: "-",
+                                     #border_side: "|"))
 
     #$game_debug += "Created menu button\n"
 
@@ -1660,7 +1877,9 @@ module WindowTemplates
     end
 
 
-    menu = Menu.new(height: menu_h,
+    default_menu_settings = self.default_menu_settings(args).merge(args)
+    menu_args = self.create_subhash(default_menu_settings, "menu")
+    menu = Menu.new(menu_args.merge(height: menu_h,
                     width: menu_w,
                     top: menu_t,
                     left: menu_l,
@@ -1669,7 +1888,7 @@ module WindowTemplates
                     content: content,
                     actions: actions,
                     col1: col1,
-                    col2: col2)
+                    col2: col2))
 
     menu.merge_key_map(Keys::ENTER => ->{ menu.input_to_return = menu.selected; menu_screen.break; })
 
@@ -1686,6 +1905,8 @@ module WindowTemplates
                          width: 55,
                          top: (Curses.lines - 35)/2,
                          left: (Curses.cols - 55)/2,
+                         menu_border_top: nil,
+                         menu_border_side: nil,
                          lines: 3, 
                          title: "Load Save", 
                          item_padding: 1,
@@ -1823,10 +2044,10 @@ module WindowTemplates
     title_w = win_w - padding_left - padding_right
     title_t = win_t + padding_top
     title_l = win_l + padding_left
-    title_win = self.window_title(title: title,
-                                  width: title_w,
-                                  top: title_t,
-                                  left: title_l)
+    title_win = self.window_title(args.merge(title_content: title,
+                                  title_width: title_w,
+                                  title_top: title_t,
+                                  title_left: title_l))
 
     settings_window.add_region(title_win)
 
@@ -1838,30 +2059,36 @@ module WindowTemplates
     sub_menu_padding = 1
 
     #Create a menu for each set of options
+    default_menu_settings = self.default_menu_settings(args).merge(args)
+    menu_args = self.create_subhash(default_menu_settings, "menu")
     settings.each_key do |key|
       options = settings[key][:options]
       sub_w = options.reduce(0) { |w,k| k.length > w ? k.length : w } + sub_menu_padding * 2  #longest string + padding
       menu_contents << key.to_s
       currently_selected = [settings[key][:active]]
       sub_menu_actions = options.map { |op| ->{ new_settings[key] = op; currently_selected[0] = op } }
-      sub_menu = Menu.new(height: options.length + sub_menu_padding * 2,
+      sub_menu = Menu.new(menu_args.merge(height: options.length + sub_menu_padding * 2,
                           width: sub_w,
                           top: sub_t,
                           left: sub_l,
-                          col1: col1,
-                          col2: col2,
+                          #col1: col1,
+                          #col2: col2,
                           padding: sub_menu_padding,
                           content: options,
                           actions: sub_menu_actions,
                           border_top: "-",
-                          border_side: "|")
+                          border_side: "|"))
       
       #Create window that displays currently selected item from sub-menu
       sub_menu_displays << Window.new(height: 1,
                                     width: 10,
                                     top: sub_t,
                                     left: sub_l,
-                                    content: currently_selected)
+                                    content: currently_selected,
+                                    col1: col1,
+                                    col2: col2,
+                                    fg: col1[0],
+                                    bg: col1[1])
 
       #sub_menu.merge_key_map({ Keys::ESCAPE => ->{sub_menu.lose_focus} })
       sub_menus << sub_menu
@@ -1874,11 +2101,11 @@ module WindowTemplates
     btn_t = win_t + win_h - 5 - 1
     btn_l = win_l + padding_left
     btn_w = win_w - padding_left - padding_right
-    button_set = self.button_set(top: btn_t,
-                                 left: btn_l,
-                                 width: btn_w,
+    button_set = self.button_set(args.merge(btn_set_top: btn_t,
+                                 btn_set_left: btn_l,
+                                 btn_set_width: btn_w,
                                  buttons: [["Save", ->{  settings_window.break; return new_settings }],
-                                           ["Cancel", ->{  settings_window.break; return current_settings }]])
+                                           ["Cancel", ->{  settings_window.break; return current_settings }]]))
 
     button_set.set_key_map({ Keys::UP =>->{ button_set.lose_focus },
                              Keys::LEFT =>->{ button_set.to_previous },
@@ -1916,6 +2143,8 @@ module WindowTemplates
                     actions: actions,
                     col1: col1,
                     col2: col2,
+                    fg: col1[0],
+                    bg: col1[1],
                     break_on_select: false)
 
     settings_window.add_region(menu)
@@ -2002,11 +2231,11 @@ module WindowTemplates
   end
 
   def self.window_title(args)
-
-    title = args.fetch(:title, nil) || "Window"
-    width = args.fetch(:width, nil) || 10
+    title = args.fetch(:title_content, nil) || "Window"
+    width = args.fetch(:title_width, nil) || 10
     padding_left = padding_right = (width - title.length) / 2
 
+=begin
     default_title_settings = { height: 3,
                                width: 10,
                                padding_top: 1,
@@ -2014,10 +2243,12 @@ module WindowTemplates
                                padding_left: padding_left,
                                padding_right: padding_right,
                                content: title }
+=end
 
-    args = default_title_settings.merge(args)
-
-    return Window.new(args)
+    default_title_settings = self.default_title_settings(args).merge(args)
+    title_args = self.create_subhash(default_title_settings, "title")
+    return Window.new(title_args.merge(padding_left: padding_left,
+                                       padding_right: padding_right))
 
   end
 
@@ -2047,20 +2278,19 @@ module WindowTemplates
     title_l = win_l + padding_left
 
     title = args.fetch(:title, nil) || "Window"
-    title_win = self.window_title(title: title,
-                                  width: title_w, 
-                                  top: title_t,
-                                  left: title_l)
+    title_win = self.window_title(args.merge(title_content: title,
+                                  title_width: title_w, 
+                                  title_top: title_t,
+                                  title_left: title_l))
 
     btn_h = 5
     buttons = args.fetch(:buttons, nil) || [["Yes", nil], ["No", nil]]
 
-    default_button_settings = { height: btn_h,
-                                width: win_w - padding * 2,
-                                top: win_t + win_h - btn_h - 1,
-                                border_side: "|",
-                                left: win_l + padding_left,
-                                buttons: buttons }
+    default_button_settings = args.merge( btn_set_height: btn_h,
+                                          btn_set_width: win_w - padding * 2,
+                                          btn_set_top: win_t + win_h - btn_h - 1,
+                                          btn_set_left: win_l + padding_left,
+                                          buttons: buttons )
 
     button_set = self.button_set(default_button_settings)
     
@@ -2074,11 +2304,11 @@ module WindowTemplates
     end
 
     content = args.fetch(:content, nil) || ""
-    content_win = Window.new(height: win_h - title_h - btn_h - padding_top - padding_bottom,
+    content_win = Window.new(args.merge(height: win_h - title_h - btn_h - padding_top - padding_bottom,
                              width: win_w - padding_left - padding_right,
                              top: title_t + title_h,
                              left: win_l + padding_left,
-                             content: content) 
+                             content: content)) 
 
     screen.add_region(title_win)
     screen.add_region(button_set)
