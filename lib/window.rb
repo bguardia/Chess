@@ -9,17 +9,22 @@ $window_debug = ""
 
 module ColorSchemes
   THEMES ||= { :blue =>
-    { col1: [:white, :blue],
-      col2: [:blue, :yellow] },
+    { col1: [:black, :cyan],
+      col2: [:white, :cyan],
+      col3: [:black, :green] },
+
     :black =>
-    { col1: [:white, :black],
-      col2: [:red, :b_black] },
+    { col1: [:yellow, :black],
+      col2: [:white, :black],
+      col3: [:red, :yellow] },
     :green =>
     { col1: [:b_yellow, :green],
       col2: [:red, :b_green] },
     :purple =>
-    { col1: [:white, :magenta],
-      col2: [:magenta, :green] },
+    { col1: [:black, :magenta],
+      col2: [:white, :magenta],
+      col3: [:magenta, :green],
+      board_color: :green },
     :yellow =>
     { col1: [:white, :yellow],
       col2: [:black, :yellow],
@@ -2148,6 +2153,7 @@ module WindowTemplates
 
     col1 = args.fetch(:col1)
     col2 = args.fetch(:col2)
+    col3 = args.fetch(:col3)
 
     menu_padding = 5
 
@@ -2255,6 +2261,7 @@ module WindowTemplates
                     actions: actions,
                     col1: col1,
                     col2: col2,
+                    col3: col3,
                     fg: col1[0],
                     bg: col1[1],
                     break_on_select: false)
@@ -2293,7 +2300,11 @@ module WindowTemplates
 
     bg_map = bg_map.gsub(/[123]/, '1' => char1, '2' => char2, '3' => char3)
 =end
-    self.color_cmap(bg_map, args)
+    col_pair1 = args.fetch(:col1, nil)
+    col1 = col_pair1 ? col_pair1[1] : :black
+    col2 = :b_white
+    col3 = args.fetch(:board_color, nil) || :b_magenta
+    self.color_cmap(bg_map, col1: col1, col2: col2, col3: col3)
   end
 
   def self.game_board_fg_map(args = {})
@@ -2311,7 +2322,10 @@ module WindowTemplates
 
     fg_map = fg_map.gsub(/[23]/, '2' => char2, '3' => char3)
 =end
-    self.color_cmap(fg_map, args)
+    col1 = :black
+    col2 = :white
+    col3 = args.fetch(:board_color, nil) || :b_magenta
+    self.color_cmap(fg_map, col1: col1, col2: col2, col3: col3)
   end
 
   def self.game_board(args = {})
@@ -2324,11 +2338,11 @@ module WindowTemplates
                 "3| X  X  X  X  X  X  X  X | \n" +
                 "2| X  X  X  X  X  X  X  X | \n" +
                 "1| X  X  X  X  X  X  X  X | \n" + 
-                " -------------------------- \n"
+                "                            \n"
     
     board_color = args.fetch(:board_color, nil) || :b_magenta
-    bg_map = self.game_board_bg_map(col3: board_color)
-    fg_map = self.game_board_fg_map(col3: board_color)
+    bg_map = self.game_board_bg_map(args)
+    fg_map = self.game_board_fg_map(args)
     #$game_debug += "bg_map is: #{bg_map}"
     #$game_debug += "fg_map is: #{fg_map}"
     arr = args.fetch(:board).arr 
@@ -2505,10 +2519,10 @@ module WindowTemplates
 
     board = args.fetch(:board) || Board.new
     board_color = args.fetch(:board_color, nil) || :b_magenta 
-    board_map = self.game_board(board: board,
+    board_map = self.game_board(args.merge(board: board,
                                 top: 5,
                                 left: 40,
-                                board_color: board_color)
+                                board_color: board_color))
     
     game_screen.add_region(game_title_display)
     game_screen.add_region(board_map)
@@ -2523,7 +2537,7 @@ end
 
 def test_map
 
-  test_str = "   a  b  c  d  e  f  g  h   \n" +
+  test_str = "   a  b  c  d  e  f  g  h \ \n" +
              "1| X  X  X  X  X  X  X  X | \n" +
              "2| X  X  X  X  X  X  X  X | \n" +
              "3| X  X  X  X  X  X  X  X | \n" +
@@ -2532,7 +2546,7 @@ def test_map
              "6| X  X  X  X  X  X  X  X | \n" +
              "7| X  X  X  X  X  X  X  X | \n" +
              "8| X  X  X  X  X  X  X  X | \n" + 
-             " -------------------------- \n"
+             " \________________________\ \n"
    
   bg_map =     "bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" +
              (("bbMMMWWWMMMWWWMMMWWWMMMWWWbb\n" +

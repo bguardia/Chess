@@ -84,7 +84,7 @@ def start_game(args)
   players = get_players(args)
   unless players.nil?
     game = Game.new(players: players) #[player_one, player_two])
-    init_game_ui(game, args.merge(board_color: Settings.get("board_color").to_sym))
+    init_game_ui(game, args)#.merge(board_color: Settings.get("board_color").to_sym))
     game.start
   end
 end
@@ -148,7 +148,7 @@ def init_game_ui(game, args = {})
   left = 0 
 
   board = Board.new
-  board_color = args.fetch(:board_color, nil) || :b_magenta
+  board_color = args.fetch(:board_color, nil) || :blue
   move_history_input = []
   message_input = []
   turn_display_input = []
