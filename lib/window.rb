@@ -30,7 +30,7 @@ module ColorSchemes
     :purple =>
     { col1: [:black, :magenta],
       col2: [:white, :magenta],
-      col3: [:magenta, :green],
+      col3: [:magenta, :b_green],
       board_color: :green,
       board_highlight: :magenta },
 
@@ -173,11 +173,14 @@ module Highlighting
     color_pair = c_color_pairs.fetch([fg, bg], nil) || new_c_pair([fg, bg])
   end
 
+  def bright?(col)
+    col.to_s.include?("b_")
+  end
+
   #Highlights a single character or row of characters with curses
   def c_highlight(win, chr, pos)
     data = get_highlight_data(pos[1], pos[0])
     color_pair = c_color_pairs.fetch(data, nil) || new_c_pair(data)
-    
     win.attron(Curses.color_pair(color_pair))
     win.setpos(pos[0], pos[1])
     win.addstr(chr)
@@ -206,9 +209,6 @@ module Highlighting
   def curses_fill(win, fg, bg, chr = " ")
     color_pair = c_color_pairs.fetch([fg, bg], nil) || new_c_pair([fg, bg])
     col = Curses.color_pair(color_pair)
-    $window_debug += "called curses_fill on #{self.class}\n"
-    $window_debug += "fg: #{fg}, bg: #{bg}, color_pair: #{color_pair}\n"
-    $window_debug += "col: #{col}\n"
     win.attron(col)
     win.bkgd(chr.ord)
     win.attroff(col)
@@ -1055,6 +1055,7 @@ class Menu < List
   def post_post_initialize(args)
     @actions = args.fetch(:actions) #a 2D array containing a string to display and a lambda to call = ["Start Game", ->{ game_start}]
     @pos_y = 0
+    @prev_pos_y = 0
     @break_on_select = args.fetch(:break_on_select, true) 
     #@col2 = args.fetch(:col2, nil)
     #@col1 = args.fetch(:col1, nil)
@@ -1062,6 +1063,7 @@ class Menu < List
     @key_map = default_key_map.merge(args.fetch(:key_map, {}))
 
     #$game_debug += "Menu contents (length: #{@content.length}) are: #{@content}\n"
+    clean_content
     update
   end
 
@@ -1071,8 +1073,21 @@ class Menu < List
       Keys::ENTER => -> { select }}
   end
 
+  def update_prev_pos
+    @prev_pos_y = @pos_y
+  end
+
+  def clean_content
+    @content.map! do |item|
+      item.split("\n").map do |line|
+        line.ljust(@width - @padding_left - @padding_right)
+      end
+    end
+  end
+
   def to_up
     if @pos_y - 1 >= 0
+      update_prev_pos
       @pos_y -= 1
     else
       lose_focus
@@ -1082,6 +1097,7 @@ class Menu < List
 
   def to_down
     if @pos_y + 1 <= @content.length - 1
+      update_prev_pos
       @pos_y += 1
     else
       lose_focus
@@ -1111,51 +1127,39 @@ class Menu < List
     active.call
   end
 
-  def win_update
-    #gets the last @num_lines lines of @content (or all if length < @num_lines)
-    y = 0
-    pos_y = 0
-    @win.erase
-    @content.each do |item|
-      line_arr = item.split("\n")
-      item_height = line_arr.length
-
-      @win.setpos(y,0)
+  def write_arr(line_arr, pos_y)
       c_pair = get_line_color(pos_y)
       c_num = return_c_pair(c_pair[0], c_pair[1]) 
       col = Curses.color_pair(c_num)
-      @win.attron(col)
+      @win.attron(col) do
       line_arr.each do |line|
         @win.addstr(line.ljust(@width - @padding * 2, @bkgd))
-        y += 1
-        break if y >= @height
       end
-      @win.attroff(col)
-
-      c_num = return_c_pair(@col1[0], @col1[1])
-      col = Curses.color_pair(c_num)
-      @win.attron(col) do
-        @item_padding.times do
-          @win.addstr(" " * @width)
-          y += 1
-        end
       end
+  end
 
-      pos_y += 1
-      break if y >= @height
+  def win_update
+    y = 0
+    pos_y = 0
+    blank_line = " " * (@width - @padding_left - @padding_right)
+    menu_str = @content.map { |item| item.join }.join(blank_line * @item_padding)
+    c_num = return_c_pair(@col2[0], @col2[1])
+    col = Curses.color_pair(c_num)
+    @win.setpos(0,0)
+    @win.attron(col) do
+      @win.addstr(menu_str)
     end
-
-    #Fill in menu color if there are lines remaining
-    if y < @height
-      c_num = return_c_pair(@fg, @bg)
-      col = Curses.color_pair(c_num)
-      @win.attron(col) do
-        (@height - y).times do
-          @win.addstr( @bkgd * @width )
-        end
-      end
+   
+    if @in_focus 
+    selected_line_num = @pos_y * (@content.first.length + @item_padding)
+    $game_debug += "selected_line_num is: #{selected_line_num}\n"
+    @win.setpos(selected_line_num, 0)
+    c_num = return_c_pair(@col3[0], @col3[1])
+    col = Curses.color_pair(c_num)
+    @win.attron(col) do
+      @win.addstr(@content[@pos_y].join)
     end
-        
+    end
     @win.refresh
   end
 
