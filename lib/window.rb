@@ -7,6 +7,31 @@ require './lib/piece.rb'
 
 $window_debug = ""
 
+module ColorSchemes
+  THEMES ||= { :blue =>
+    { col1: [:white, :blue],
+      col2: [:blue, :yellow] },
+    :black =>
+    { col1: [:white, :black],
+      col2: [:red, :b_black] },
+    :green =>
+    { col1: [:b_yellow, :green],
+      col2: [:red, :b_green] },
+    :purple =>
+    { col1: [:white, :magenta],
+      col2: [:magenta, :green] },
+    :yellow =>
+    { col1: [:white, :yellow],
+      col2: [:black, :yellow],
+      col3: [:yellow, :black],
+      title_col1: [:white, :yellow]  }
+   }
+
+  def self.get(theme)
+    return THEMES[theme.to_sym]
+  end
+end
+
 module Keys
 
   UP ||= Curses::Key::UP
@@ -134,7 +159,7 @@ module Highlighting
 
   #Highlights a single character or row of characters with curses
   def c_highlight(win, chr, pos)
-    data = highlight_arr[pos[0]][pos[1]]
+    data = get_highlight_data(pos[1], pos[0])
     color_pair = c_color_pairs.fetch(data, nil) || new_c_pair(data)
     
     win.attron(Curses.color_pair(color_pair))
@@ -187,6 +212,16 @@ module Highlighting
         y.dup
       end
     end
+  end
+
+  def get_highlight_data(x, y)
+    if y >= 0  && y < highlight_arr.length
+      if x >= 0 && x < highlight_arr[y].length
+        return highlight_arr[y][x]
+      end
+    end
+    
+    return [:green, :purple] #highlight_arr.first.first
   end
 
   def highlight_arr
@@ -373,8 +408,11 @@ class Window
       @left = args.fetch(:left, 0)
     end
 
-    @fg = args.fetch(:fg, nil) || :white
-    @bg = args.fetch(:bg, nil) || :black
+    @col1 = args.fetch(:col1, nil) || [:black, :white] #color of border and padded area of windows
+    @col2 = args.fetch(:col2, nil) || @col1 #color of window content
+    @col3 = args.fetch(:col3, nil) || [:red, :black] #color of highlighted elements
+    @fg = args.fetch(:fg, nil) || @col1[0]
+    @bg = args.fetch(:bg, nil) || @col1[1]
     @bkgd = args.fetch(:bkgd, nil) || " "
 
     @border_top = args.fetch(:border_top, nil)
@@ -532,7 +570,7 @@ class Window
       y += 1
     end
     if border_top && border_side
-      @border_win.attron(col) do 
+      @border_win.attron(col | Curses::A_BOLD) do 
         @border_win.box(border_side, border_top)
       end 
     end
@@ -580,12 +618,12 @@ class Window
       to_print = @content
     end
 
-    col = Curses.color_pair(return_c_pair(@fg, @bg))
+    col = Curses.color_pair(return_c_pair(@col2[0], @col2[1]))
     y = 0
     @win.attron(col) do 
       to_print.each do |line|
         @win.setpos(y,0)
-        @win.addstr(line.ljust(@width))
+        @win.addstr(line.chomp.ljust(@width))
         y += 1
       end
     end
@@ -596,6 +634,26 @@ class Window
   def update
     border_win_update 
     win_update
+  end
+end
+
+class ColorfulWindow < Window
+
+  def post_initialize(args)
+    set_color_map(args)
+  end
+
+  def set_color_map(args)
+    bg_map = args.fetch(:bg_map)
+    fg_map = args.fetch(:fg_map)
+    color_arr = create_color_arr(fg_map, bg_map)
+    init_highlight_arr(color_arr)
+  end
+
+  def win_update
+    str_arr = @content.map { |row| row.chomp.split("") }
+    curses_colorize_str(@win, str_arr)
+    @win.refresh
   end
 end
 
@@ -919,7 +977,8 @@ class List < Window
 
   def post_initialize(args)
     @num_lines = args.fetch(:lines, nil) || @height
-    @col_arr = args.fetch(:color_arr, nil) || [[:white, :black]]
+    @item_padding = args.fetch(:item_padding, nil) || 0
+    #@col_arr = args.fetch(:color_arr, nil) || [[:white, :black]]
     post_post_initialize(args)
   end
 
@@ -930,25 +989,46 @@ class List < Window
     to_print = @content.length > @num_lines ? @content[-@num_lines...@content.length] : @content
     y = 0
     @win.erase
-    to_print.each do |line|
+
+    c_pair = get_line_color(y)
+    c_num = return_c_pair(c_pair[0], c_pair[1]) 
+    col = Curses.color_pair(c_num)
+    #@win.attron(col) do
+    #  @win.bkgd(" ".ord)
+    #end
+
+    @win.attron(col) do
+
+      to_print.each do |line|
+        @win.addstr(line.ljust(@width - @padding * 2, @bkgd))
+        #@win.attroff(col)
+        y += 1
+        @item_padding.times do 
+          @win.addstr(@bkgd * (@width - @padding * 2))
+          y += 1
+          break if y > @height
+        end
+        break if y > @height
+      end
+
+    (@height - y).times do 
       @win.setpos(y,0)
-      c_pair = get_line_color(y)
-      c_num = return_c_pair(c_pair[0], c_pair[1]) 
-      col = Curses.color_pair(c_num)
-      @win.attron(col)
-      @win.addstr(line.ljust(@width - @padding * 2, @bkgd))
-      @win.attroff(col)
-      y += @height/@num_lines
-      break if y > @height
+      @win.addstr(@bkgd * (@width - @padding * 2))
+      y += 1
     end
+    end
+
     @win.refresh
     $window_debug += "called #{self.class}.update. to_print is: #{to_print}\n"
   end
 
   def get_line_color(line_num)
+=begin
     return 0 if @col_arr.empty?
     i = line_num % @col_arr.length
     @col_arr[i]
+=end
+    @col2
   end
 end
 
@@ -960,8 +1040,8 @@ class Menu < List
     @actions = args.fetch(:actions) #a 2D array containing a string to display and a lambda to call = ["Start Game", ->{ game_start}]
     @pos_y = 0
     @break_on_select = args.fetch(:break_on_select, true) 
-    @col2 = args.fetch(:col2, nil)
-    @col1 = args.fetch(:col1, nil)
+    #@col2 = args.fetch(:col2, nil)
+    #@col1 = args.fetch(:col1, nil)
     @item_padding = args.fetch(:item_padding, nil) || 0
     @key_map = default_key_map.merge(args.fetch(:key_map, {}))
 
@@ -1003,9 +1083,9 @@ class Menu < List
 
   def get_line_color(line_num)
     if @in_focus && line_num == @pos_y
-      col = @col2
+      col = @col3
     else
-      col = @col1 
+      col = @col2 
     end
   end
 
@@ -1096,8 +1176,8 @@ class TypingField < Window
  include Highlighting
 
  def post_initialize(args)
-   @bg = args.fetch(:bg, nil) #colors should be passed as symbols used in Highlighting
-   @fg = args.fetch(:fg, nil)
+   #@bg = args.fetch(:bg, nil) #colors should be passed as symbols used in Highlighting
+   #@fg = args.fetch(:fg, nil)
    @input_to_return = "" 
    @content = ""
    @break = false
@@ -1134,7 +1214,7 @@ class TypingField < Window
  end
 
  def set_color
-   col = Curses.color_pair(return_c_pair(@fg, @bg))
+   col = Curses.color_pair(return_c_pair(@col2[0], @col2[1]))
    @win.attron(col)
    @win.setpos(0,0)
    @win.addstr(@input_to_receive.to_s.ljust(@width))
@@ -1173,7 +1253,7 @@ class TypingField < Window
    Curses.noecho
    @win.keypad(true)
    @win.setpos(0,0)
-   @win.attron(Curses.color_pair(return_c_pair(@fg, @bg))) 
+   @win.attron(Curses.color_pair(return_c_pair(@col2[0], @col2[1]))) 
  end
 
  def get_input
@@ -1191,7 +1271,7 @@ class TypingField < Window
  end
 
  def post_get_input
-   @win.attroff(Curses.color_pair(return_c_pair(@fg, @bg)))
+   @win.attroff(Curses.color_pair(return_c_pair(@col2[0], @col2[1])))
    Curses.echo
    @win.keypad(false)
    #@win.erase
@@ -1358,10 +1438,10 @@ class Button < Window
   include InteractiveWindow
 
   def post_initialize(args)
-    @col1 = args.fetch(:col1, nil)
-    @fg = @col1[0]
-    @bg = @col1[1]
-    @col2 = args.fetch(:col2, nil)
+    #@col1 = args.fetch(:col1, nil)
+    #@fg = @col1[0]
+    #@bg = @col1[1]
+    #@col2 = args.fetch(:col2, nil)
     @highlighted = false
     @action = args.fetch(:action, nil) || Proc.new { @break = true }
     @key_map = default_key_map.merge(args.fetch(:key_map, {}))
@@ -1405,9 +1485,9 @@ class Button < Window
 
   def win_update
     if @highlighted
-      c_pair = @col2
+      c_pair = @col3
     else
-      c_pair = @col1
+      c_pair = @col2
     end
 
     @win.erase
@@ -1496,6 +1576,7 @@ module WindowTemplates
     height = self.default_button_settings[:btn_height] + padding * 2
     col1 = args.fetch(:col1, nil) || [:white, :black]
     col2 = args.fetch(:col2, nil) || [:red, :yellow]
+    col3 = args.fetch(:col3, nil) || [:red, :yellow]
 
      { btn_set_width: width,
        btn_set_height: height,
@@ -1510,6 +1591,7 @@ module WindowTemplates
        btn_set_fg: col1[0],
        btn_set_bg: col1[1],
        btn_set_col2: col2,
+       btn_set_col3: col3,
        btn_set_top: 0,
        btn_set_left: 0 }  
   end
@@ -1520,6 +1602,7 @@ module WindowTemplates
     padding = args.fetch(:btn_padding, nil) || 1
     col1 = args.fetch(:col1, nil) || [:white, :black]
     col2 = args.fetch(:col2, nil) || [:red, :yellow]
+    col3 = args.fetch(:col3, nil) || [:red, :yellow]
 
     { btn_padding: padding,
       btn_padding_left: padding,
@@ -1532,6 +1615,7 @@ module WindowTemplates
       btn_border_side: "|",
       btn_col1: col1,
       btn_col2: col2,
+      btn_col3: col3,
       btn_top: 0,
       btn_left: 0 }
   end
@@ -1542,6 +1626,7 @@ module WindowTemplates
     width = args.fetch(:width, nil) || title.length + padding * 2
     col1 = args.fetch(:col1, nil) || [:white, :black]
     col2 = args.fetch(:col2, nil) || [:red, :yellow]
+    col3 = args.fetch(:col3, nil) || [:red, :yellow]
 
     { title_padding: padding,
       title_padding_left: padding,
@@ -1556,8 +1641,29 @@ module WindowTemplates
       title_col2: col2,
       title_fg: col1[0],
       title_bg: col1[1],
+      title_col3: col3,
       title_top: 0,
       title_left: 0 } 
+  end
+
+  def self.default_field_settings(args = {})
+    padding = args.fetch(:padding, nil) || 1
+    col1 = args.fetch(:col1, nil)
+    col2 = args.fetch(:col2, nil)
+    col3 = args.fetch(:col3, nil)
+
+    { field_padding: padding,
+      field_padding_left: padding,
+      field_padding_right: padding,
+      field_padding_bottom: padding,
+      field_padding_top: padding,
+      field_width: 15,
+      field_height: 3,
+      field_col1: col1,
+      field_col2: col2,
+      field_col3: col3,
+      field_top: 0,
+      field_left: 0 }
   end
 
   def self.default_menu_settings(args = {})
@@ -1572,6 +1678,7 @@ module WindowTemplates
     padding = args.fetch(:menu_padding, nil) || 1
     col1 = args.fetch(:col1, nil) || [:white, :black]
     col2 = args.fetch(:col2, nil) || [:red, :yellow]
+    col3 = args.fetch(:col3, nil) || [:red, :yellow]
 
     { menu_padding: padding,
       menu_padding_left: padding,
@@ -1587,6 +1694,7 @@ module WindowTemplates
       menu_col2: col2,
       menu_fg: col1[0],
       menu_bg: col1[1],
+      menu_col3: col3,
       menu_top: 0,
       menu_left: 0 }
   end
@@ -1886,9 +1994,9 @@ module WindowTemplates
                     lines: num_lines,
                     item_padding: item_padding,
                     content: content,
-                    actions: actions,
-                    col1: col1,
-                    col2: col2))
+                    actions: actions))
+                    #col1: col1,
+                    #col2: col2))
 
     menu.merge_key_map(Keys::ENTER => ->{ menu.input_to_return = menu.selected; menu_screen.break; })
 
@@ -1948,25 +2056,27 @@ module WindowTemplates
     title_t = screen.top + padding_top
     title_l = screen.left + padding_left
     title = args.fetch(:title, nil) || "Input Box"
-    title_win = WindowTemplates.window_title(title: title,
-                                             width: title_w,
-                                             top: title_t,
-                                             left: title_l)
+    title_win = WindowTemplates.window_title(args.merge(title_content: title,
+                                             title_width: title_w,
+                                             title_top: title_t,
+                                             title_left: title_l))
     screen.add_region(title_win)
     
     #OK Button
     btn_w = 6
-    btn_h = 5
-    btn_t = screen.top + screen.height - btn_h - padding_bottom
+    #btn_h = 5
+    btn_t = screen.top + screen.height - 3  - padding_bottom
     btn_l = screen.left + (screen.width - btn_w) / 2
-    button = Button.new(content: "OK",
-                        height: btn_h,
+    button_default_settings = self.default_button_settings(args).merge(args)
+    button_args = self.create_subhash(button_default_settings, "btn")
+    button = Button.new(button_args.merge(content: "OK",
+                        #height: btn_h,
                         width: btn_w,
                         top: btn_t,
                         left: btn_l,
-                        action: ->{},
-                        col1: [:white, :black],
-                        col2: [:red, :yellow])
+                        action: ->{}))
+                        #col1: [:white, :black],
+                        #col2: [:red, :yellow])
 
     screen.add_region(button)
 
@@ -1975,15 +2085,17 @@ module WindowTemplates
     field_l = screen.left + padding_left
     field_w = screen.width - padding_left - padding_right - 2
     field_h =  5 #screen.height - padding_top - padding_bottom - title_win.height - btn_h
-    field = TypingField.new(height: field_h,
+    default_field_settings = self.default_field_settings(args).merge(args)
+    field_args = self.create_subhash(default_field_settings, "field")
+    field = TypingField.new(field_args.merge(height: field_h,
                             width: field_w,
                             top: field_t,
                             left: field_l,
                             padding: 2,
                             border_top: "-",
-                            border_side: "|",
-                            bg: :black,
-                            fg: :white)
+                            border_side: "|"))
+                            #bg: :black,
+                            #fg: :white)
 
     field.merge_key_map({ Keys::UP => -> { field.lose_focus },
                           Keys::DOWN =>->{ field.lose_focus }, 
@@ -2153,13 +2265,24 @@ module WindowTemplates
     return settings_window
   end
 
+  def self.color_cmap(map, col_args = {})
+    color_char_hash = Highlighting::COLOR_CODES.invert
+    col1 = col_args.fetch(:col1, nil) || :black
+    col2 = col_args.fetch(:col2, nil) || :b_white
+    col3 = col_args.fetch(:col3, nil) || :b_magenta
+    char1 = color_char_hash[col1]
+    char2 = color_char_hash[col2]
+    char3 = color_char_hash[col3]
+    map.gsub(/[123]/, '1' => char1, '2' => char2, '3' => char3)
+  end
+
 
   def self.game_board_bg_map(args = {})
     bg_map =  "1111111111111111111111111111\n" +
              (("1122233322233322233322233311\n" +
                "1133322233322233322233322211\n") * 4) +
                "1111111111111111111111111111\n"
-
+=begin
     color_char_hash = Highlighting::COLOR_CODES.invert
     col1 = args.fetch(:col1, nil) || :black
     col2 = args.fetch(:col2, nil) || :b_white
@@ -2169,6 +2292,8 @@ module WindowTemplates
     char3 = color_char_hash[col3]
 
     bg_map = bg_map.gsub(/[123]/, '1' => char1, '2' => char2, '3' => char3)
+=end
+    self.color_cmap(bg_map, args)
   end
 
   def self.game_board_fg_map(args = {})
@@ -2176,7 +2301,7 @@ module WindowTemplates
              (("33                          \n" +
                "22                          \n") * 4 ) +
                "                            "
-
+=begin
     #color nums chosen to match bg_map
     color_char_hash = Highlighting::COLOR_CODES.invert
     col2 = args.fetch(:col2, nil) || :b_white
@@ -2185,6 +2310,8 @@ module WindowTemplates
     char3 = color_char_hash[col3]
 
     fg_map = fg_map.gsub(/[23]/, '2' => char2, '3' => char3)
+=end
+    self.color_cmap(fg_map, args)
   end
 
   def self.game_board(args = {})
@@ -2329,47 +2456,52 @@ module WindowTemplates
     border_top = args.fetch(:border_top, nil) || "-"
     border_side = args.fetch(:border_side, nil) || "|"
 
-    game_screen = InteractiveScreen.new(height: h, 
+    col_hash = { :col1 => args[:col1],
+                 :col2 => args[:col2],
+                 :col3 => args[:col3] }
+
+    game_screen = InteractiveScreen.new(col_hash.merge(height: h, 
                                         width: w, 
                                         top: t, 
-                                        left: l)
+                                        left: l))
 
     game_title = args.fetch(:title, nil) || "Game"
-    game_title_display = Window.new(height: 3,
+    game_title_display = Window.new(col_hash.merge(height: 3,
                                     width: game_title.length,
                                     left: 40,
                                     top: 3,
-                                    content: game_title)
+                                    content: game_title))
                                    
     move_history_input = args.fetch(:move_history_input) || []
-    move_history_feed = self.self_scrolling_feed(height: 30,
+    move_history_feed = self.self_scrolling_feed(col_hash.merge(height: 30,
                                                  width: 15,
                                                  top: 5,
                                                  left: 5,
                                                  padding: 1,
                                                  content: move_history_input,
                                                  lines: 15,
+                                                 item_padding: 1,
                                                  border_top: border_top, 
-                                                 border_side: border_side)
-    move_history_label = Window.new(top: 3,
+                                                 border_side: border_side))
+    move_history_label = Window.new(col_hash.merge(top: 3,
                                     left: 5,
-                                    content: "Move History")
+                                    content: "Move History"))
                                  
     message_input = args.fetch(:message_input) || []
-    message_feed = self.self_scrolling_feed(height: 3, 
+    message_feed = self.self_scrolling_feed(col_hash.merge(height: 3, 
                                             width: 50, 
                                             top: 5,
                                             left: 80,
                                             content: message_input,
-                                            lines: 1)
+                                            lines: 1))
     
     turn_display_input = args.fetch(:turn_display_input) || []
-    turn_display = self.self_scrolling_feed(height: 3,
+    turn_display = self.self_scrolling_feed(col_hash.merge(height: 3,
                                             width: 30,
                                             top: 7,
                                             left: 80,
                                             content: turn_display_input,
-                                            lines: 1)
+                                            lines: 1))
 
     board = args.fetch(:board) || Board.new
     board_color = args.fetch(:board_color, nil) || :b_magenta 

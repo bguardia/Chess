@@ -19,12 +19,14 @@ module Settings
 
   def self.default_vars
     { "bkgd_color" => "black",
-      "board_color" => "b_magenta" }
+      "board_color" => "b_magenta",
+      "theme" => "black" }
   end
 
   def self.possible_vars
     { "bkgd_color" => ["black", "red", "green", "yellow", "blue"],
-      "board_color" => ["red", "b_yellow", "green", "b_blue", "b_magenta", "b_cyan"] }
+      "board_color" => ["red", "b_yellow", "green", "b_blue", "b_magenta", "b_cyan"],
+      "theme" => ["black", "blue", "green", "purple", "yellow"] }
   end
 
   def self.load
@@ -82,7 +84,7 @@ def start_game(args)
   players = get_players(args)
   unless players.nil?
     game = Game.new(players: players) #[player_one, player_two])
-    init_game_ui(game, board_color: Settings.get("board_color").to_sym)
+    init_game_ui(game, args.merge(board_color: Settings.get("board_color").to_sym))
     game.start
   end
 end
@@ -151,11 +153,18 @@ def init_game_ui(game, args = {})
   message_input = []
   turn_display_input = []
 
+  col1 = args.fetch(:col1, nil) || [:white, :black]
+  col2 = args.fetch(:col2, nil) || [:red, :yellow]
+  col3 = args.fetch(:col3, nil) || [:red, :yellow]
+
   title = "#{game.players[0].name} vs. #{game.players[1].name}"
   game_screen = WindowTemplates.game_screen(height: height,
                                             width: width,
                                             top: 0,
                                             left: 0,
+                                            col1: col1,
+                                            col2: col2,
+                                            col3: col3,
                                             title: title,
                                             move_history_input: move_history_input,
                                             message_input: message_input,
@@ -175,6 +184,7 @@ end
 def load_save(args)
  col1 = args.fetch(:col1, nil) || [:white, :black]
  col2 = args.fetch(:col2, nil) || [:red, :yellow]
+ col3 = args.fetch(:col3, nil) || [:red, :yellow]
 
  SaveHelper.load_saves
  content = []
@@ -189,7 +199,8 @@ def load_save(args)
                                        col1: col1,
                                        col2: col2,
                                        fg: col1[0],
-                                       bg: col1[1])
+                                       bg: col1[1],
+                                       col3: col3)
  load_menu.update
  game_to_load = InputHandler.new(in: load_menu).get_input
  
@@ -197,7 +208,7 @@ def load_save(args)
    game = Game.new
    save = SaveHelper.saves[game_to_load]
    game.load(save.data)
-   init_game_ui(game)
+   init_game_ui(game, args)
    game.start
  end
 end
@@ -309,14 +320,43 @@ def title_screen(args = {})
   top = args.fetch(:top, nil) || 3
   left = (Curses.cols - width - padding * 2) / 2
   col1 = args.fetch(:col1, nil) || [:white, :black]
+  col2 = args.fetch(:col2, nil) || [:red, :yellow]
+  col3 = args.fetch(:col3, nil) || [:red, :yellow]
+
+=begin
+  title_map = ""
+  File.open("title_cmap2.txt") do |f|
+    title_map = f.readlines.join
+  end
+  fg_map = WindowTemplates.color_cmap(title_map, col1: :black, col2: :black, col3: :black)
+  bg_map = WindowTemplates.color_cmap(title_map, col1: :yellow, col2: :black, col3: :white)
+
+  $game_debug += "fg_map is: #{fg_map}\n\nbg_map: #{bg_map}\n"
+
+  ColorfulWindow.new(height: height,
+          width: width,
+          content: title_image,
+          fg_map: fg_map,
+          bg_map: bg_map,
+          padding: padding,
+          top: top,
+          left: left,
+          col1: col1, 
+          col2: col2,
+          col3: col3,
+          border_top: "-",
+          border_side: "|")
+=end
+
   Window.new(height: height,
              width: width,
              content: title_image,
              padding: padding,
              top: top,
              left: left,
-             fg: col1[0],
-             bg: col1[1],
+             col1: col1,
+             col2: col2,
+             col3: col3,
              border_top: "-",
              border_side: "|") 
 end
@@ -337,8 +377,9 @@ begin
   def_w = w < 88 ? w/2 : 40 + pad * 2
   def_t = h < 40 ? h/2 : (h - def_h) / 2
   def_l = (w - def_w) / 2
-  col1 = [:white, Settings.get("bkgd_color").to_sym]
-  col2 = [:red, :yellow]
+  color_scheme = ColorSchemes.get(Settings.get("theme"))
+  col1 = color_scheme[:col1] #[:white, Settings.get("bkgd_color").to_sym]
+  col2 = color_scheme[:col2] #[:red, :yellow]
   fg = col1[0]
   bg = col1[1]
 
@@ -349,14 +390,15 @@ begin
                        :padding => pad,
                        :col1 => col1,
                        :col2 => col2,
+                       :col3 => color_scheme[:col3],
                        :fg => fg,
                        :bg => bg,
                        :border_top => "-",
-                       :border_side => "|"}
+                       :border_side => "|"}.merge(color_scheme)
 
-  
 
-  bkgd_color = Settings.get("bkgd_color").to_sym
+
+  bkgd_color = bg #Settings.get("bkgd_color").to_sym
   screen = InteractiveScreen.new(height: h, width: w, top: 0, left: 0, fg: :white, bg: bkgd_color, bkgd: " ")
   
   title_top = h < 40 ? 0 : 3
