@@ -2487,58 +2487,105 @@ module WindowTemplates
                                         top: t, 
                                         left: l))
 
+    padding = 2
+    win_h = 25 + padding * 2
+    win_w = 85 + padding * 2
+    win_t = (game_screen.height - win_h) / 2
+    win_l = (game_screen.width - win_w) / 2
+    game_window = InteractiveScreen.new(col_hash.merge(height: win_h,
+                                                       width: win_w,
+                                                       top: win_t,
+                                                       left: win_l,
+                                                       border_top: "-",
+                                                       border_side: "|"))
+
+    $game_debug += "win_h: #{win_h}, win_w: #{win_w}, win_t: #{win_t}, win_l: #{win_l}\n"
+
     game_title = args.fetch(:title, nil) || "Game"
-    game_title_display = Window.new(col_hash.merge(height: 3,
+    title_h = 3
+    title_t = win_t + padding
+    title_l = win_l + (win_w - (padding * 2) - game_title.length) / 2
+    game_title_display = Window.new(col_hash.merge(height: title_h,
                                     width: game_title.length,
-                                    left: 40,
-                                    top: 3,
+                                    left: title_l,
+                                    top: title_t,
                                     content: game_title))
-                                   
-    move_history_input = args.fetch(:move_history_input) || []
-    move_history_feed = self.self_scrolling_feed(col_hash.merge(height: 30,
-                                                 width: 15,
-                                                 top: 5,
-                                                 left: 5,
-                                                 padding: 1,
-                                                 content: move_history_input,
-                                                 lines: 15,
-                                                 item_padding: 1,
-                                                 border_top: border_top, 
-                                                 border_side: border_side))
-    move_history_label = Window.new(col_hash.merge(top: 3,
-                                    left: 5,
-                                    content: "Move History"))
-                                 
-    message_input = args.fetch(:message_input) || []
-    message_feed = self.self_scrolling_feed(col_hash.merge(height: 3, 
-                                            width: 50, 
-                                            top: 5,
-                                            left: 80,
-                                            content: message_input,
-                                            lines: 1))
-    
-    turn_display_input = args.fetch(:turn_display_input) || []
-    turn_display = self.self_scrolling_feed(col_hash.merge(height: 3,
-                                            width: 30,
-                                            top: 7,
-                                            left: 80,
-                                            content: turn_display_input,
-                                            lines: 1))
+ 
+    $game_debug += "title_h: #{title_h}, title_t: #{title_t}, title_l: #{title_l}\n"
 
     board = args.fetch(:board) || Board.new
     board_color = args.fetch(:board_color, nil) || :b_magenta 
+    board_arr = board.to_s.split("\n")
+    board_h = board_arr.length
+    board_w = board_arr.first.length
+    board_t = win_t + (win_h - padding * 2 - board_h) / 2 + title_h
+    board_l = win_l + (win_w - padding * 2 - board_w) / 2
     board_map = self.game_board(args.merge(board: board,
-                                top: 5,
-                                left: 40,
+                                top: board_t,
+                                left: board_l,
                                 board_color: board_color))
-    
-    game_screen.add_region(game_title_display)
-    game_screen.add_region(board_map)
-    game_screen.add_region(move_history_feed[0])
-    game_screen.add_region(message_feed[0])
-    game_screen.add_region(move_history_label)
-    game_screen.add_region(turn_display[0])
+                                   
+    $game_debug += "board_h: #{board_h}, board_w: #{board_w}, board_t: #{board_t}, board_l: #{board_l}\n"
 
+    mh_h = win_h - title_h - padding * 2
+    mh_w = board_l - win_l - padding * 2
+    mh_t = title_t + game_title_display.height
+    mh_l = win_l + padding
+    mh_lines = (mh_h - 1) / 2
+    move_history_input = args.fetch(:move_history_input) || []
+    move_history_feed = self.self_scrolling_feed(col_hash.merge(height: mh_h,
+                                                 width: mh_w,
+                                                 top: mh_t,
+                                                 left: mh_l,
+                                                 padding: 1,
+                                                 content: move_history_input,
+                                                 lines: mh_lines,
+                                                 item_padding: 1,
+                                                 border_top: border_top, 
+                                                 border_side: border_side))
+    
+    $game_debug += "mh_h: #{mh_h}, mh_w: #{mh_w}, mh_t: #{mh_t}, mh_l: #{mh_l}\n"
+
+    mh_title_content = "Move History"
+    mh_title_l = mh_l #+ (mh_w - mh_title_content.length) / 2
+    mh_t = title_t + 2
+    move_history_label = Window.new(col_hash.merge(top: mh_t,
+                                    left: mh_title_l,
+                                    content: mh_title_content))
+
+    $game_debug += "mh_title_l: #{mh_title_l}\n"
+
+    message_input = args.fetch(:message_input) || []
+    mf_h = 3
+    mf_w = mh_w
+    mf_t = mh_t
+    mf_l = board_l + board_w + 1
+    message_feed = self.self_scrolling_feed(col_hash.merge(height: mf_h, 
+                                            width: mf_w, 
+                                            top: mf_t,
+                                            left: mf_l,
+                                            content: message_input,
+                                            lines: 1))
+    
+    $game_debug += "mf_h: #{mf_h}, mf_w: #{mf_w}, mf_t: #{mf_t}, mf_l: #{mf_l}\n"
+    td_w = 18
+    td_l = win_l + win_w - padding - td_w
+    turn_display_input = args.fetch(:turn_display_input) || []
+    turn_display = self.self_scrolling_feed(col_hash.merge(height: mf_h,
+                                            width: td_w,
+                                            top: mh_t,
+                                            left: td_l,
+                                            content: turn_display_input,
+                                            lines: 1))
+
+    
+    game_window.add_region(game_title_display)
+    game_window.add_region(board_map)
+    game_window.add_region(move_history_feed[0])
+    game_window.add_region(message_feed[0])
+    game_window.add_region(move_history_label)
+    game_window.add_region(turn_display[0])
+    game_screen.add_region(game_window)
     return game_screen
   end
 end
