@@ -7,7 +7,7 @@ class Player < Saveable
   def initialize(args = {})
     @@num_players += 1
     @id = args.fetch(:id, nil) || @@num_players
-    @name = args.fetch(:name, nil) || "Player #{@id}"
+    @name = set_name(args)
     @team = args.fetch(:team, "")
     @input_handler = args.fetch(:input_handler, nil)
   end
@@ -19,6 +19,15 @@ class Player < Saveable
                 :team => @team })
   end
 =end
+
+  def set_name(args)
+    name = args.fetch(:name, nil)
+    if name.nil? || name == ""
+      name = self.class.to_s + " #{@id}"
+    else
+      name
+    end
+  end
 
   def team=(team)
     @team = team
