@@ -16,20 +16,31 @@ module ColorSchemes
     :black =>
     { col1: [:yellow, :black],
       col2: [:white, :black],
-      col3: [:red, :yellow] },
+      col3: [:red, :yellow],
+      board_color: :yellow,
+      board_highlight: :red },
+      
     :green =>
-    { col1: [:b_yellow, :green],
-      col2: [:red, :b_green] },
+    { col1: [:black, :green],
+      col2: [:white, :green],
+      col3: [:black, :cyan],
+      board_color: :cyan,
+      board_highlight: :green },
+
     :purple =>
     { col1: [:black, :magenta],
       col2: [:white, :magenta],
       col3: [:magenta, :green],
-      board_color: :green },
+      board_color: :green,
+      board_highlight: :magenta },
+
     :yellow =>
     { col1: [:white, :yellow],
       col2: [:black, :yellow],
       col3: [:yellow, :black],
-      title_col1: [:white, :yellow]  }
+      title_col1: [:white, :yellow],
+      board_color: :cyan,
+      board_highlight: :yellow  }
    }
 
   def self.get(theme)
@@ -1363,11 +1374,11 @@ class CursorMap < Map
           pos = mv.destination(something)
           str_pos = arr_to_str_pos(pos)
           chr = @str_arr[str_pos[0]][str_pos[1]]
-          c_temp_highlight(@win, chr, str_pos, [:black, :yellow])
+          c_temp_highlight(@win, chr, str_pos, @col3)
         end
       str_pos = arr_to_str_pos(current_pos)
       chr = @str_arr[str_pos[0]][str_pos[1]]
-      c_temp_highlight(@win, chr, str_pos, [:black, :yellow])
+      c_temp_highlight(@win, chr, str_pos, @col3)
       #get highlights from board and update map display with highlights
       end 
     end 
@@ -2347,6 +2358,7 @@ module WindowTemplates
     #$game_debug += "fg_map is: #{fg_map}"
     arr = args.fetch(:board).arr 
  
+    board_highlight = args.fetch(:board_highlight, nil) || :yellow
     top = args.fetch(:top, (Curses.lines - arr.length) /2)
     left = args.fetch(:left, (Curses.cols - arr.first.length) /2)
     board_map = CursorMap.new(top: top, 
@@ -2356,6 +2368,7 @@ module WindowTemplates
                               key: "X", 
                               bg_map: bg_map, 
                               fg_map: fg_map,
+                              col3: [:black, board_highlight],
                               empty_chr: "_")
 
   end

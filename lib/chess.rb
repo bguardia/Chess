@@ -149,6 +149,7 @@ def init_game_ui(game, args = {})
 
   board = Board.new
   board_color = args.fetch(:board_color, nil) || :blue
+  board_highlight = args.fetch(:board_highlight, nil) || :yellow
   move_history_input = []
   message_input = []
   turn_display_input = []
@@ -156,7 +157,7 @@ def init_game_ui(game, args = {})
   col1 = args.fetch(:col1, nil) || [:white, :black]
   col2 = args.fetch(:col2, nil) || [:red, :yellow]
   col3 = args.fetch(:col3, nil) || [:red, :yellow]
-
+  
   title = "#{game.players[0].name} vs. #{game.players[1].name}"
   game_screen = WindowTemplates.game_screen(height: height,
                                             width: width,
@@ -170,7 +171,8 @@ def init_game_ui(game, args = {})
                                             message_input: message_input,
                                             turn_display_input: turn_display_input,
                                             board: board,
-                                            board_color: board_color)
+                                            board_color: board_color, 
+                                            board_highlight: board_highlight)
 
 
   game.set_ui(board: board,
