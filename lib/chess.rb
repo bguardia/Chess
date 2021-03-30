@@ -367,7 +367,9 @@ if __FILE__ == $0
 begin
   Curses.init_screen
   Curses.start_color
-
+  Curses.noecho
+  Curses.curs_set(0)
+  Curses.cbreak
   h = Curses.lines
   w = Curses.cols
 
@@ -416,6 +418,7 @@ begin
     screen.update
   end
 ensure
+  Curses.echo
   Settings.save
   Curses.close_screen
   puts $game_debug

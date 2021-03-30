@@ -1166,8 +1166,6 @@ class Menu < List
   def before_get_input
     set_focus
     update
-    Curses.noecho
-    Curses.curs_set(0)
     @win.keypad(true)
     @break = false
   end
@@ -1182,7 +1180,6 @@ class Menu < List
 
   def post_get_input
     @win.keypad(false)
-    Curses.curs_set(1)
   end
 end
 
@@ -1266,7 +1263,7 @@ class TypingField < Window
 
  def before_get_input
    @input_to_return = ""
-   Curses.noecho
+   Curses.curs_set(1)
    @win.keypad(true)
    @win.setpos(0,0)
    @win.attron(Curses.color_pair(return_c_pair(@col2[0], @col2[1]))) 
@@ -1288,10 +1285,8 @@ class TypingField < Window
 
  def post_get_input
    @win.attroff(Curses.color_pair(return_c_pair(@col2[0], @col2[1])))
-   Curses.echo
+   Curses.curs_set(0)
    @win.keypad(false)
-   #@win.erase
-   #@win.refresh
  end
 
 end
@@ -1429,13 +1424,12 @@ class CursorMap < Map
     update
     @input_to_return = nil
     @stored_input = nil
-    Curses.noecho
-    Curses.cbreak
     Curses.curs_set(1)
     @win.keypad(true)
   end
 
   def post_get_input
+    Curses.curs_set(0)
     @win.keypad(false)
   end
 
@@ -1478,8 +1472,6 @@ class Button < Window
 
   def before_get_input
     @highlighted = true
-    Curses.noecho
-    Curses.curs_set(0)
     @win.keypad(true)
     update
   end
@@ -1495,7 +1487,6 @@ class Button < Window
   def post_get_input
     @highlighted = false
     @win.keypad(false)
-    Curses.curs_set(1)
     update
   end
 
