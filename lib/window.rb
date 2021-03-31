@@ -11,7 +11,9 @@ module ColorSchemes
   THEMES ||= { :blue =>
     { col1: [:black, :cyan],
       col2: [:white, :cyan],
-      col3: [:black, :green] },
+      col3: [:black, :green],
+      board_color: :green,
+      board_highlight: :cyan },
 
     :black =>
     { col1: [:yellow, :black],
@@ -2517,7 +2519,7 @@ module WindowTemplates
     board_color = args.fetch(:board_color, nil) || :b_magenta 
     board_arr = board.to_s.split("\n")
     board_h = board_arr.length
-    board_w = board_arr.first.length
+    board_w = 27 #board_arr[1].length
     board_t = win_t + (win_h - padding * 2 - board_h) / 2 + title_h
     board_l = win_l + (win_w - padding * 2 - board_w) / 2
     board_map = self.game_board(args.merge(board: board,
@@ -2558,7 +2560,7 @@ module WindowTemplates
     message_input = args.fetch(:message_input) || []
     mf_h = 3
     mf_w = mh_w
-    mf_t = mh_t
+    mf_t = mh_t + mf_h 
     mf_l = board_l + board_w + 1
     message_feed = self.self_scrolling_feed(col_hash.merge(height: mf_h, 
                                             width: mf_w, 
