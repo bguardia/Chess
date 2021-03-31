@@ -171,7 +171,7 @@ class Game < Saveable
                               gamestate: @gamestate)
      break if @break_game_loop
      move = input.kind_of?(Move) ? input : to_move(input)
-     valid_move = move.kind_of?(EmptyMove) ? false : true 
+     valid_move = valid?(move) 
      @io_stream.update
      break if valid_move
    end
@@ -179,6 +179,10 @@ class Game < Saveable
    unless @break_game_loop
      @gamestate.do!(move)
      update_move_history(move)
+     piece = move.get_piece
+     pos = move.destination(piece)
+     $game_debug += "pos: #{pos}, note: #{ChessNotation.pos_notation(pos)}\n"
+     @message_input << "#{player.team.capitalize} moves #{piece} to #{ChessNotation.pos_notation(pos)}."
    end
  end
 
@@ -245,7 +249,6 @@ class Game < Saveable
  
  def valid?(move)
    piece = move.get_piece
-   
    unless piece
      @message_input << "Not a valid move"
      return false
@@ -253,14 +256,13 @@ class Game < Saveable
 
    pos = move.destination(piece)
    removed = @gamestate.get_piece_at(pos)
-
    unless piece.team == @current_player.team
      @message_input << "You can only move pieces on your team (#{@current_player.team})."
      return false
    end
 
    #Must be a possible move of the piece
-
+=begin
    unless piece.can_reach?(pos)
      @message_input << "#{piece.to_s} cannot move there."
      return false
@@ -271,7 +273,7 @@ class Game < Saveable
      @message_input << "Destination is occupied by a friendly piece."
      return false
    end
-
+=end
    @message_input << ""
    return true
  end
@@ -408,7 +410,11 @@ module ChessNotation
          capture = "x"
      end
 
+     #Rewind state to check for any other pieces that could move to the same position
+     #If so, add clarifying rank or file
+     state.undo
      detail = clarify_notation(pieces.first, dest_pos_arr.first, state)
+     state.do!(move)
 
      #check for check/checkmate 
      check = ""
@@ -507,6 +513,10 @@ module ChessNotation
      @@file[move[1]]
    end
 
+   def self.pos_notation(pos)
+     "#{self.to_file(pos)}#{self.to_rank(pos)}"
+   end
+
    #break down an individual note into its components
    def self.decomp_note(note)
      note_hash = {}
@@ -524,8 +534,10 @@ module ChessNotation
      
      #if note has two lowercase letters or two numbers, it contains a clarifying value
      if note.count("abcdefgh") >= 2 || note.count("123456789") >= 2
+       $game_debug += "count of 'abcdefgh' or '0123456789' is >= 2\n"
        f = from_file(note[/([a-h]).*[a-h]/, 1]) || "*"
        r = from_rank(note[/([0-9]).*[0-9]/, 1]) || "*"
+       $game_debug += "detail is: f:#{f}, r: #{r}\n"
        note_hash[:detail] = [ r , f ]
      end
 
@@ -573,19 +585,19 @@ module ChessNotation
      capture = note_hash[:capture]
      r = note_hash[:rank]
      f = note_hash[:file]
-     #$game_debug += "Decomped note. Results are: p: #{p}\n dtl: #{dtl}\n capture: #{capture}\n r: #{r}\n f: #{f}\n" 
      pos = [from_rank(r), from_file(f)]
-     #$game_debug += "pos is: #{pos}\n"
+
      #Get pieces of the same type who can reach the position
      possible_pieces = Movement.who_can_reach?(pos, state, type: p)
-     #$game_debug += "possible pieces are: #{possible_pieces}\n"
      if possible_pieces.length > 1
-       possible_pieces.select! do |p|
-         p.team == state.get_active_team
-       end
+       #Remove any pieces of the non-active team
+       possible_pieces.select! { |p| p.team == state.get_active_team }
+       #If still multiple pieces, check the clarifying detail
        if possible_pieces.length > 1
-         current_pos = state.get_pos(p)
-         current_pos[0] == dtl[0] || current_pos[1] == dtl[1]
+         possible_pieces.select! do |p|
+           current_pos = state.get_pos(p)
+           current_pos[0] == dtl[0] || current_pos[1] == dtl[1]
+         end
        end
      elsif possible_pieces.length == 0
        return nil
@@ -604,17 +616,24 @@ module ChessNotation
 
    #return any clarifying notes if piece & move combo are unclear
    #otherwise returns an empty string
-   def self.clarify_notation(piece, move, state)
+   def self.clarify_notation(piece, dest_pos, state)
+     $game_debug += "#{piece.team} #{piece.class} #{piece.id}, dest_pos: #{dest_pos}\n"
      #gets set of moved piece
      team = piece.team
      similar_pieces = state.get_pieces(type: piece.class.to_s, team: team)
+
+     $game_debug += "similar_pieces: #{similar_pieces.map { |p| "#{p.team} #{p.class} #{p.id}\n" }}\n"
      #Get all pieces that are same kind as piece
      
      #Select a piece which can do the same move
      other = similar_pieces.find do |p|
-       p.id != piece.id && p.can_reach?(move)
+       moves = state.get_moves(id: p.id)
+       can_reach = moves.find { |mv| mv.destination(p) == dest_pos }
+       $game_debug += "For #{p.team} #{p.class} #{p.id}: moves: #{moves.length}, can_reach: #{can_reach}\n"
+       p.id != piece.id && can_reach
      end
-
+     
+     $game_debug += "other piece: #{other ? other : "nil" }\n"
      #return if no other piece exists
      return "" if other.nil?
 
@@ -622,9 +641,13 @@ module ChessNotation
      piece_pos = state.get_pos(piece)
      other_pos = state.get_pos(piece)
      if other_pos[0] == piece_pos[0]
-       to_file(piece_pos)
+       f = to_file(piece_pos)
+       $game_debug +=" returning #{f}\n"
+       f
      else
-       to_rank(piece_pos)
+       r = to_rank(piece_pos)
+       $game_debug += " returning #{r}\n"
+       r
      end
    end
 
