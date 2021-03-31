@@ -995,31 +995,75 @@ class List < Window
 
   def post_initialize(args)
     @num_lines = args.fetch(:lines, nil) || @height
+    @cols = args.fetch(:cols, nil) || 1
+    @just = args.fetch(:just, nil) || "left"
     @item_padding = args.fetch(:item_padding, nil) || 0
+    @colified_content_map = Array.new(@cols) { Array.new(@num_lines) } 
     #@col_arr = args.fetch(:color_arr, nil) || [[:white, :black]]
     post_post_initialize(args)
   end
 
   def post_post_initialize(args); end
 
+  def justify(str, size)
+    if @just == "left"
+      str.to_s.ljust(size)
+    else
+      str.to_s.rjust(size)
+    end
+  end
+
+  def colify_content
+    total_spaces = @num_lines * @cols
+    #Advance all stored indexes if content array size if greater than total spaces
+    #and last stored index is second-to-last element of content
+    if @content.length > total_spaces && @colified_content_map[-1][-1].to_i == @content.length - 2
+      @colified_content_map.map! do |col_arr|
+        col_arr.map! do |el|
+          el.to_i + 1
+        end
+      end
+    end
+
+    #Add all elements of @content which are not already stored
+      stored_items = @colified_content_map.reduce(0) { |tot, col_arr| tot + col_arr.compact.length }
+      (@content.length - stored_items).times do |i|
+        @colified_content_map.each_index do |col_num|
+          col = @colified_content_map[col_num]
+          open_index = col.index(nil)
+          next unless open_index
+          @colified_content_map[col_num][open_index] = stored_items + i #store index of item in @contents
+          break
+        end
+      end
+    
+  end
+
   def win_update
-    #gets the last @num_lines lines of @content (or all if length < @num_lines)
-    to_print = @content.length > @num_lines ? @content[-@num_lines...@content.length] : @content
+    colify_content
+    to_print = []
+
+
+    content_width = @width - @padding * 2
+    @num_lines.times do |i|
+      temp_str = ""
+      @cols.times do |j|
+        content_index = @colified_content_map[j][i]
+        item = content_index ? @content[content_index] : nil
+        temp_str += justify(item, content_width/@cols)
+      end
+      to_print << temp_str
+    end
+
     y = 0
     @win.erase
 
     c_pair = get_line_color(y)
     c_num = return_c_pair(c_pair[0], c_pair[1]) 
     col = Curses.color_pair(c_num)
-    #@win.attron(col) do
-    #  @win.bkgd(" ".ord)
-    #end
-
     @win.attron(col) do
-
       to_print.each do |line|
-        @win.addstr(line.ljust(@width - @padding * 2, @bkgd))
-        #@win.attroff(col)
+        @win.addstr(justify(line, content_width))
         y += 1
         @item_padding.times do 
           @win.addstr(@bkgd * (@width - @padding * 2))
@@ -2540,6 +2584,7 @@ module WindowTemplates
                                                  top: mh_t,
                                                  left: mh_l,
                                                  padding: 1,
+                                                 cols: 2,
                                                  content: move_history_input,
                                                  lines: mh_lines,
                                                  item_padding: 1,
@@ -2567,7 +2612,8 @@ module WindowTemplates
                                             top: mf_t,
                                             left: mf_l,
                                             content: message_input,
-                                            lines: 1))
+                                            lines: 1,
+                                            just: "right"))
     
     $game_debug += "mf_h: #{mf_h}, mf_w: #{mf_w}, mf_t: #{mf_t}, mf_l: #{mf_l}\n"
     td_w = 18
