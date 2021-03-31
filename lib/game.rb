@@ -86,10 +86,12 @@ class Game < Saveable
  end
 
  def start
-   @players[0].team = "white"
-   @players[1].team = "black"
-   @current_player = @players[0]
- 
+   unless @current_player
+     @players[0].team = "white"
+     @players[1].team = "black"
+     @current_player = @players[0]
+   end
+
    initialize_gamestate 
   
    @input_handler = InputHandler.new(in: @io_stream)
