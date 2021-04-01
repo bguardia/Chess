@@ -102,7 +102,7 @@ def get_players(args)
   t = (Curses.lines - h) / 2
   l = (Curses.cols - w) / 2
 =end  
-  who_plays_menu = WindowTemplates.menu_two(args.merge(title: "Choose who will play:",
+  who_plays_menu = WindowTemplates.menu_two(args.merge(title_content: "Choose who will play:",
                                             content: content))
                                             #actions: actions))
   who_plays_menu.update
@@ -118,7 +118,7 @@ def get_players(args)
 
   unless num_players == 0 && num_comps == 0 #don't create players if a selection isn't made
     #Ask for player names using input boxes
-    create_box = ->(title){ WindowTemplates.input_box(args.merge(title: title)) }
+    create_box = ->(title){ WindowTemplates.input_box(args.merge(title_content: title)) }
     n = 1
     players = []
     num_players.times do
@@ -166,7 +166,7 @@ def init_game_ui(game, args = {})
                                             col1: col1,
                                             col2: col2,
                                             col3: col3,
-                                            title: title,
+                                            title_content: title,
                                             move_history_input: move_history_input,
                                             message_input: message_input,
                                             turn_display_input: turn_display_input,
@@ -195,7 +195,7 @@ def load_save(args)
    content << save.to_s
  end
 
- load_menu = WindowTemplates.save_menu(title: "Load Save",
+ load_menu = WindowTemplates.save_menu(title_content: "Load Save",
                                        content: content,
                                        actions: actions,
                                        col1: col1,
@@ -234,7 +234,7 @@ def quit_game(args)
                                       content: content,
                                       buttons: buttons)
 =end  
-  quit_confirm = WindowTemplates.confirmation_screen(args.merge(title: title, content: content))
+  quit_confirm = WindowTemplates.confirmation_screen(args.merge(title_content: title, content: content))
   quit_confirm.update
   quit_bool = InputHandler.new(in: quit_confirm).get_input
   $game_debug += "quit_bool is: #{quit_bool}\n"
@@ -245,7 +245,7 @@ end
 
 def about_game(args)
   info = "You want to learn about the game and the amazing person who made it. That's great! Thank you very much."
-  about_win = WindowTemplates.confirmation_screen(args.merge(content: info, title: "About Game"))
+  about_win = WindowTemplates.confirmation_screen(args.merge(content: info, title_content: "About Game"))
   about_win.update
   InputHandler.new(in: about_win).get_input
 end
@@ -325,31 +325,6 @@ def title_screen(args = {})
   col2 = args.fetch(:col2, nil) || [:red, :yellow]
   col3 = args.fetch(:col3, nil) || [:red, :yellow]
 
-=begin
-  title_map = ""
-  File.open("title_cmap2.txt") do |f|
-    title_map = f.readlines.join
-  end
-  fg_map = WindowTemplates.color_cmap(title_map, col1: :black, col2: :black, col3: :black)
-  bg_map = WindowTemplates.color_cmap(title_map, col1: :yellow, col2: :black, col3: :white)
-
-  $game_debug += "fg_map is: #{fg_map}\n\nbg_map: #{bg_map}\n"
-
-  ColorfulWindow.new(height: height,
-          width: width,
-          content: title_image,
-          fg_map: fg_map,
-          bg_map: bg_map,
-          padding: padding,
-          top: top,
-          left: left,
-          col1: col1, 
-          col2: col2,
-          col3: col3,
-          border_top: "-",
-          border_side: "|")
-=end
-
   Window.new(height: height,
              width: width,
              content: title_image,
@@ -363,18 +338,19 @@ def title_screen(args = {})
              border_side: "|") 
 end
 
-if __FILE__ == $0
-begin
-  Curses.init_screen
-  Curses.start_color
-  Curses.noecho
-  Curses.curs_set(0)
-  Curses.cbreak
+
+def bg_screen(args)
+  h = Curses.lines
+  w = Curses.cols
+  screen = InteractiveScreen.new(args.merge(height: h, width: w, top: 0, left: 0, fg: :white, bkgd: " "))
+end
+
+def initialize_ui
+
   h = Curses.lines
   w = Curses.cols
 
   Settings.load
-
 
   pad = 2
   def_h = h < 40 ? h/2 : 15 + pad * 2
@@ -401,9 +377,7 @@ begin
                        :border_side => "|"}.merge(color_scheme)
 
 
-
-  bkgd_color = bg #Settings.get("bkgd_color").to_sym
-  screen = InteractiveScreen.new(height: h, width: w, top: 0, left: 0, fg: :white, bg: bkgd_color, bkgd: " ")
+  screen = WindowTemplates.interactive_screen
   
   title_top = h < 40 ? 0 : 3
   title_args = default_win_size.merge(top: title_top)
@@ -417,6 +391,17 @@ begin
     input_handler.get_input
     screen.update
   end
+end
+
+if __FILE__ == $0
+begin
+  Curses.init_screen
+  Curses.start_color
+  Curses.noecho
+  Curses.curs_set(0)
+  Curses.cbreak
+  
+  initialize_ui
 ensure
   Curses.echo
   Settings.save

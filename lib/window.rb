@@ -8,7 +8,8 @@ require './lib/piece.rb'
 $window_debug = ""
 
 module ColorSchemes
-  THEMES ||= { :blue =>
+  THEMES ||= { 
+    :blue =>
     { col1: [:black, :cyan],
       col2: [:white, :cyan],
       col3: [:black, :green],
@@ -23,11 +24,13 @@ module ColorSchemes
       board_highlight: :red },
       
     :green =>
-    { col1: [:black, :green],
+    { col1: [:magenta, :green],
       col2: [:white, :green],
-      col3: [:black, :cyan],
+      col3: [:magenta, :cyan],
       board_color: :cyan,
-      board_highlight: :green },
+      board_highlight: :green,
+      bg_bg: :cyan,
+      title_col2: [:magenta, :cyan] },
 
     :purple =>
     { col1: [:black, :magenta],
@@ -1559,6 +1562,10 @@ end
 
 module WindowTemplates
 
+  def self.color_set
+    @@color_set ||= ColorSchemes.get(Settings.get("theme"))
+  end
+
   def self.screen_height
     @@screen_height ||= Curses.lines
   end
@@ -1574,36 +1581,43 @@ module WindowTemplates
       left: 0 }
   end
 
-  def self.default_window_settings
+  def self.default_background_settings
     screen_h = self.screen_height
     screen_w = self.screen_width
+    color_scheme = ColorSchemes.get(Settings.get("theme"))
+    col1 = color_scheme[:col1]
 
-    pad = 2
-    def_h = screen_h < 40 ? screen_h/2 : 15 + pad * 2
-    def_w = screen_w < 88 ? screen_w/2 : 40 + pad * 2
-    def_t = (screen_h - def_h) / 2
-    def_l = (screen_w - def_w) / 2
-    col1 = [:white, Settings.get("bkgd_color").to_sym]
-    col2 = [:red, :yellow]
-    fg = col1[0]
-    bg = col1[1]
+    { bg_height: screen_h,
+      bg_width: screen_w,
+      bg_top: 0,
+      bg_left: 0,
+      bg_col1: col1 }.merge(self.color_set)
+  end
 
-    border_top = "-"
-    border_side = "|"
+  def self.default_window_settings
+    #unless @@default_window_settings
+      screen_h = self.screen_height
+      screen_w = self.screen_width
 
-    default_win_size = { :screen_h => screen_h,
-                         :screen_w => screen_w,
-                         :height => def_h,
-                         :width => def_w,
-                         :top => def_t,
-                         :left => def_l,
-                         :padding => pad,
-                         :col1 => col1,
-                         :col2 => col2,
-                         :fg => fg,
-                         :bg => bg,
-                         :border_top => border_top,
-                         :border_side => border_side }
+      pad = 2
+      def_h = screen_h < 40 ? screen_h/2 : 15 + pad * 2
+      def_w = screen_w < 88 ? screen_w/2 : 40 + pad * 2
+      def_t = (screen_h - def_h) / 2
+      def_l = (screen_w - def_w) / 2
+
+      border_top = "-"
+      border_side = "|"
+    #end
+
+    @@default_window_settings = self.color_set.merge(:screen_h => screen_h,
+                                                      :screen_w => screen_w,
+                                                      :height => def_h,
+                                                      :width => def_w,
+                                                      :top => def_t,
+                                                      :left => def_l,
+                                                      :padding => pad,
+                                                      :border_top => border_top,
+                                                      :border_side => border_side )
 
   end
 
@@ -1631,11 +1645,11 @@ module WindowTemplates
     win_width = args.fetch(:width, nil)
     width = win_width ? win_width - win_padding * 2 : 10
     height = self.default_button_settings[:btn_height] + padding * 2
-    col1 = args.fetch(:col1, nil) || [:white, :black]
-    col2 = args.fetch(:col2, nil) || [:red, :yellow]
-    col3 = args.fetch(:col3, nil) || [:red, :yellow]
+    col1 = self.color_set[:col1] 
+    col2 = self.color_set[:col2] 
+    col3 = self.color_set[:col3] 
 
-     { btn_set_width: width,
+    {  btn_set_width: width,
        btn_set_height: height,
        btn_set_padding: padding,
        btn_set_padding_left: padding,
@@ -1650,16 +1664,16 @@ module WindowTemplates
        btn_set_col2: col2,
        btn_set_col3: col3,
        btn_set_top: 0,
-       btn_set_left: 0 }  
+       btn_set_left: 0 }.merge(self.color_set) 
   end
 
   def self.default_button_settings(args = {})
     #Create default button settings based on content of button
     content = args.fetch(:btn_content, nil) || "OK"
     padding = args.fetch(:btn_padding, nil) || 1
-    col1 = args.fetch(:col1, nil) || [:white, :black]
-    col2 = args.fetch(:col2, nil) || [:red, :yellow]
-    col3 = args.fetch(:col3, nil) || [:red, :yellow]
+    col1 = self.color_set[:col1] 
+    col2 = self.color_set[:col2] 
+    col3 = self.color_set[:col3] 
 
     { btn_padding: padding,
       btn_padding_left: padding,
@@ -1674,16 +1688,16 @@ module WindowTemplates
       btn_col2: col2,
       btn_col3: col3,
       btn_top: 0,
-      btn_left: 0 }
+      btn_left: 0 }.merge(self.color_set)
   end
 
   def self.default_title_settings(args = {})
     padding = args.fetch(:title_padding, nil) || 1
     title = args.fetch(:title_content, nil) || "Window"
     width = args.fetch(:width, nil) || title.length + padding * 2
-    col1 = args.fetch(:col1, nil) || [:white, :black]
-    col2 = args.fetch(:col2, nil) || [:red, :yellow]
-    col3 = args.fetch(:col3, nil) || [:red, :yellow]
+    col1 = self.color_set[:col1] 
+    col2 = self.color_set[:col2] 
+    col3 = self.color_set[:col3] 
 
     { title_padding: padding,
       title_padding_left: padding,
@@ -1700,14 +1714,14 @@ module WindowTemplates
       title_bg: col1[1],
       title_col3: col3,
       title_top: 0,
-      title_left: 0 } 
+      title_left: 0 }.merge(self.color_set) 
   end
 
   def self.default_field_settings(args = {})
     padding = args.fetch(:padding, nil) || 1
-    col1 = args.fetch(:col1, nil)
-    col2 = args.fetch(:col2, nil)
-    col3 = args.fetch(:col3, nil)
+    col1 = self.color_set[:col1] 
+    col2 = self.color_set[:col2] 
+    col3 = self.color_set[:col3] 
 
     { field_padding: padding,
       field_padding_left: padding,
@@ -1720,7 +1734,7 @@ module WindowTemplates
       field_col2: col2,
       field_col3: col3,
       field_top: 0,
-      field_left: 0 }
+      field_left: 0 }.merge(self.color_set)
   end
 
   def self.default_menu_settings(args = {})
@@ -1733,9 +1747,9 @@ module WindowTemplates
     content = args.fetch(:menu_content, nil).to_a
     height = content.length
     padding = args.fetch(:menu_padding, nil) || 1
-    col1 = args.fetch(:col1, nil) || [:white, :black]
-    col2 = args.fetch(:col2, nil) || [:red, :yellow]
-    col3 = args.fetch(:col3, nil) || [:red, :yellow]
+    col1 = self.color_set[:col1] 
+    col2 = self.color_set[:col2] 
+    col3 = self.color_set[:col3] 
 
     { menu_padding: padding,
       menu_padding_left: padding,
@@ -1753,7 +1767,7 @@ module WindowTemplates
       menu_bg: col1[1],
       menu_col3: col3,
       menu_top: 0,
-      menu_left: 0 }
+      menu_left: 0 }.merge(self.color_set)
   end
 
   def self.pop_up(window)
@@ -1769,6 +1783,11 @@ module WindowTemplates
     input = win.get_input
     win.close
     return input
+  end
+
+  def self.interactive_screen
+    screen_args = self.create_subhash(self.default_background_settings, "bg")
+    screen = InteractiveScreen.new(screen_args)
   end
 
   def self.interactive_pop_up(interactive_window)
@@ -1802,8 +1821,7 @@ module WindowTemplates
   end
 
   def self.multipage_window(args = {})
- 
-    #Create window
+=begin 
     default_window_settings = { height: 30,
                                 width: 20,
                                 top: 0,
@@ -1815,20 +1833,24 @@ module WindowTemplates
                                 padding_right: 1,
                                 padding_top: 1,
                                 padding_bottom: 1 }
+=end
 
-    args = default_window_settings.merge(args)
+    args = self.default_window_settings.merge(args)
 
     screen = InteractiveScreen.new(args)
 
 
     #Create title
-    title = args.fetch(:title, nil) || "Title"
+    #title_content = args.fetch(:title, nil) || "Title"
+    title_win = self.window_title(args)
+=begin
     title_win = Window.new(height: 3,
                            width: screen.width - 2,
                            padding: 1,
                            top: screen.top + 1,
                            left: screen.left + 1,
                            content: title)
+=end
 
     #Create pages
     pages = args.fetch(:pages, nil) || []
@@ -1855,12 +1877,12 @@ module WindowTemplates
                   ["Next", to_next_page]]
 
     btn_set_top = screen.top + screen.height - 5
-    button_set = self.button_set(buttons: button_arr,
-                                 width: screen.width,
+    button_set = self.button_set(args.merge(buttons: button_arr,
+                                 #width: screen.width,
                                  btn_set_top: btn_set_top,
-                                 btn_set_left: screen.left,
-                                 col1: args.fetch(:col1),
-                                 col2: args.fetch(:col2))
+                                 btn_set_left: screen.leftx))
+                                 #col1: args.fetch(:col1),
+                                 #col2: args.fetch(:col2))
 
 
     #add title and buttons to screen
@@ -1988,7 +2010,7 @@ module WindowTemplates
     title_w = win_w - (padding * 2)
     title_t = win_t + padding_top
     title_l = win_l + padding_left
-    title = args.fetch(:title, nil) || "Load Save"
+    #title = args.fetch(:title, nil) || "Load Save"
     title_padding = args.fetch(:title_padding, nil) || 1
     
     default_title_settings = self.default_title_settings(args).merge(args)
@@ -1997,7 +2019,7 @@ module WindowTemplates
                             width: title_w,
                             top: title_t,
                             left: title_l,
-                            content: title,
+                            #content: title,
                             padding: title_padding))
 
     #$game_debug += "Created menu title\n"
@@ -2066,7 +2088,7 @@ module WindowTemplates
   end
 
   def self.save_menu(args = {}) #must pass :content
-    default_settings = { height: 35,
+    default_settings = self.color_set.merge( height: 35,
                          width: 55,
                          top: (Curses.lines - 35)/2,
                          left: (Curses.cols - 55)/2,
@@ -2076,7 +2098,7 @@ module WindowTemplates
                          title: "Load Save", 
                          item_padding: 1,
                          btn_width: 55,
-                         btn_t: (Curses.lines - 35)/2 +35 }
+                         btn_t: (Curses.lines - 35)/2 +35 )
 
     args = default_settings.merge(args)
 
@@ -2112,8 +2134,8 @@ module WindowTemplates
     title_w = screen.width - padding_left - padding_right
     title_t = screen.top + padding_top
     title_l = screen.left + padding_left
-    title = args.fetch(:title, nil) || "Input Box"
-    title_win = WindowTemplates.window_title(args.merge(title_content: title,
+    #title = args.fetch(:title, nil) || "Input Box"
+    title_win = WindowTemplates.window_title(args.merge(#title_content: title,
                                              title_width: title_w,
                                              title_top: title_t,
                                              title_left: title_l))
@@ -2465,15 +2487,14 @@ module WindowTemplates
 
     screen = InteractiveScreen.new(args)
 
-    #button_set = self.button_set(args)
     
     title_h = 3
     title_w = win_w - padding_right - padding_left
     title_t = win_t + padding_top
     title_l = win_l + padding_left
 
-    title = args.fetch(:title, nil) || "Window"
-    title_win = self.window_title(args.merge(title_content: title,
+    #title = args.fetch(:title, nil) || "Window"
+    title_win = self.window_title(args.merge(#title_content: title,
                                   title_width: title_w, 
                                   title_top: title_t,
                                   title_left: title_l))
@@ -2499,7 +2520,8 @@ module WindowTemplates
     end
 
     content = args.fetch(:content, nil) || ""
-    content_win = Window.new(args.merge(height: win_h - title_h - btn_h - padding_top - padding_bottom,
+    win_args = self.default_window_settings.merge(args)
+    content_win = Window.new(win_args.merge(height: win_h - title_h - btn_h - padding_top - padding_bottom,
                              width: win_w - padding_left - padding_right,
                              top: title_t + title_h,
                              left: win_l + padding_left,
@@ -2528,10 +2550,15 @@ module WindowTemplates
                  :col2 => args[:col2],
                  :col3 => args[:col3] }
 
+    bg_settings = self.default_background_settings
+    bg_args = self.create_subhash(bg_settings, "bg")
+    game_screen = InteractiveScreen.new(bg_args)
+=begin
     game_screen = InteractiveScreen.new(col_hash.merge(height: h, 
                                         width: w, 
                                         top: t, 
                                         left: l))
+=end
 
     padding = 2
     win_h = 25 + padding * 2
@@ -2547,16 +2574,24 @@ module WindowTemplates
 
     $game_debug += "win_h: #{win_h}, win_w: #{win_w}, win_t: #{win_t}, win_l: #{win_l}\n"
 
-    game_title = args.fetch(:title, nil) || "Game"
+    game_title = args.fetch(:title_content, nil) || "Game"
     title_h = 3
     title_t = win_t + padding
     title_l = win_l + (win_w - (padding * 2) - game_title.length) / 2
-    game_title_display = Window.new(col_hash.merge(height: title_h,
+    game_title_display = self.window_title(col_hash.merge(title_width: game_title.length,
+                                                          title_height: title_h,
+                                                          title_top: title_t,
+                                                          title_left: title_l,
+                                                          title_content: game_title))
+
+=begin
+      Window.new(col_hash.merge(height: title_h,
                                     width: game_title.length,
                                     left: title_l,
                                     top: title_t,
                                     content: game_title))
- 
+=end
+
     $game_debug += "title_h: #{title_h}, title_t: #{title_t}, title_l: #{title_l}\n"
 
     board = args.fetch(:board) || Board.new

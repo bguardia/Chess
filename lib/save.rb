@@ -235,14 +235,14 @@ module SaveHelper
         quit_without_save_bool = false
         delete_save_bool = false
 
-        confirm_win = WindowTemplates.confirmation_screen(args.merge(title: "No Save Data Remaining", content: "There are no save files remaining. Would you like to delete a save and write over it?"))
+        confirm_win = WindowTemplates.confirmation_screen(args.merge(title_content: "No Save Data Remaining", content: "There are no save files remaining. Would you like to delete a save and write over it?"))
         confirm_win.update
         delete_save_bool = InputHandler.new(in: confirm_win).get_input
         $game_debug += "delete_save_bool is: #{delete_save_bool}\n"
 
         if delete_save_bool == 1
           save_strs = @@saves.map { |save| save.to_s }
-          save_menu = WindowTemplates.save_menu(title: "Delete Save", content: save_strs)
+          save_menu = WindowTemplates.save_menu(title_content: "Delete Save", content: save_strs)
           save_menu.update
           save_to_delete = InputHandler.new(in: save_menu).get_input
           $game_debug += "save_to_delete: #{save_to_delete}\n"
@@ -254,7 +254,7 @@ module SaveHelper
         end
 
         unless delete_save_bool
-          confirm_win = WindowTemplates.confirmation_screen(args.merge(content: "Are you sure you want to quit the game without saving?"))
+          confirm_win = WindowTemplates.confirmation_screen(args.merge(title_content: "Confirm Quit", content: "Are you sure you want to quit the game without saving?"))
          confirm_win.update
          quit_without_save_bool = InputHandler.new(in: confirm_win).get_input
         end
