@@ -1301,11 +1301,14 @@ class TypingField < Window
        x -= 1
      end
 
-     #@win.setpos(y, x)
-     #@win.delch
+     @win.setpos(y, x)
+     @win.delch
      @input_to_return.slice!(x)
      @content = @input_to_return
-     update
+     @win.setpos(y, @content.length)
+     @win.addstr(" " * (@width - @content.length))
+     #update
+     #@win.attron(Curses.color_pair(return_c_pair(@col2[0], @col2[1]))) 
      @win.setpos(y, x)
    end
  end
@@ -1315,7 +1318,7 @@ class TypingField < Window
  end
 
  def before_get_input
-   @input_to_return = ""
+   #@input_to_return = ""
    Curses.curs_set(1)
    @win.keypad(true)
    @win.setpos(0,0)
@@ -1330,6 +1333,7 @@ class TypingField < Window
    #don't echo or add characters to input if there is no space remaining in field
    x = @win.curx
    if x < @width -1
+     #currently replaces selected characters
      @win.addch(input) 
      @input_to_return[x] = input
      @content = @input_to_return
