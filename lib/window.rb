@@ -26,11 +26,15 @@ module ColorSchemes
     :green =>
     { col1: [:magenta, :green],
       col2: [:white, :green],
-      col3: [:magenta, :cyan],
-      board_color: :cyan,
+      col3: [:white, :magenta],
+      board_color: :magenta,
       board_highlight: :green,
-      bg_bg: :cyan,
-      title_col2: [:magenta, :cyan] },
+      bg_bg: :magenta,
+      field_col2: [:white, :magenta],
+      title_col1: [:green, :magenta],
+      title_col2: [:white, :magenta],
+      title_border_top: "-",
+      title_border_side: "|" },
 
     :purple =>
     { col1: [:black, :magenta],
@@ -1106,6 +1110,7 @@ class Menu < List
     @pos_y = 0
     @prev_pos_y = 0
     @break_on_select = args.fetch(:break_on_select, true) 
+    @loop_selection = args.fetch(:loop, false)
     #@col2 = args.fetch(:col2, nil)
     #@col1 = args.fetch(:col1, nil)
     @item_padding = args.fetch(:item_padding, nil) || 0
@@ -1139,7 +1144,11 @@ class Menu < List
       update_prev_pos
       @pos_y -= 1
     else
-      lose_focus
+      if @loop_selection
+        @pos_y = @content.length - 1
+      else
+        lose_focus
+      end
     end
     update
   end
@@ -1149,7 +1158,11 @@ class Menu < List
       update_prev_pos
       @pos_y += 1
     else
-      lose_focus
+      if @loop_selection
+        @pos_y = 0
+      else
+        lose_focus
+      end
     end
     update
   end 
@@ -1714,15 +1727,15 @@ module WindowTemplates
       #title_border_side: "",
       title_col1: col1,
       title_col2: col2,
-      title_fg: col1[0],
-      title_bg: col1[1],
+      #title_fg: col1[0],
+      #title_bg: col1[1],
       title_col3: col3,
       title_top: 0,
       title_left: 0 }.merge(self.color_set) 
   end
 
   def self.default_field_settings(args = {})
-    padding = args.fetch(:padding, nil) || 1
+    padding = args.fetch(:field_padding, nil) || 1
     col1 = self.color_set[:col1] 
     col2 = self.color_set[:col2] 
     col3 = self.color_set[:col3] 
@@ -2000,8 +2013,9 @@ module WindowTemplates
     padding_left = args.fetch(:padding_left, nil) || padding
     padding_right = args.fetch(:padding_right, nil) || padding
     padding_bottom = args.fetch(:padding_bottom, nil) || padding
-
-    menu_screen = InteractiveScreen.new(args.merge(#height: win_h,
+    
+    win_args = self.default_window_settings.merge(args)
+    menu_screen = InteractiveScreen.new(win_args.merge(#height: win_h,
                                                    #width: win_w,
                                                    #top: win_t,
                                                    #left: win_l,
@@ -2128,11 +2142,12 @@ module WindowTemplates
 
     args = default_window_settings.merge(args)
     screen = InteractiveScreen.new(args)
-
     padding_left = args.fetch(:padding_left)
     padding_right = args.fetch(:padding_right)
     padding_top = args.fetch(:padding_top)
     padding_bottom = args.fetch(:padding_bottom)
+
+    content_width = screen.width - padding_left - padding_right
 
     #title
     title_w = screen.width - padding_left - padding_right
@@ -2164,17 +2179,17 @@ module WindowTemplates
     screen.add_region(button)
 
     #Field
-    field_t = title_t + title_win.height
-    field_l = screen.left + padding_left
-    field_w = screen.width - padding_left - padding_right - 2
-    field_h =  5 #screen.height - padding_top - padding_bottom - title_win.height - btn_h
+    field_h = 3    
+    field_t = title_t + title_win.height + (btn_t - (title_t + title_win.height) - field_h) / 2
+    field_w = content_width < 20 ? content_width - 2 : 20 
+    field_l = screen.left + (screen.width - field_w) / 2
     default_field_settings = self.default_field_settings(args).merge(args)
     field_args = self.create_subhash(default_field_settings, "field")
     field = TypingField.new(field_args.merge(height: field_h,
                             width: field_w,
                             top: field_t,
                             left: field_l,
-                            padding: 2,
+                            padding: 1,
                             border_top: "-",
                             border_side: "|"))
                             #bg: :black,
@@ -2251,15 +2266,17 @@ module WindowTemplates
 
     key_length = settings.keys.reduce(0) { |l,k| k.length > l ? k.length : l } 
     sub_l = win_l + padding_left + key_length + menu_padding
-    sub_t = title_t + title_win.height
+    sub_t = title_t + title_win.height + 1 
     sub_menu_padding = 1
+    sub_menu_padding_left = 2
+    sub_menu_padding_right = 2
 
     #Create a menu for each set of options
     default_menu_settings = self.default_menu_settings(args).merge(args)
     menu_args = self.create_subhash(default_menu_settings, "menu")
     settings.each_key do |key|
       options = settings[key][:options]
-      sub_w = options.reduce(0) { |w,k| k.length > w ? k.length : w } + sub_menu_padding * 2  #longest string + padding
+      sub_w = options.reduce(0) { |w,k| k.length > w ? k.length : w } + sub_menu_padding_left + sub_menu_padding_right  #longest string + padding
       menu_contents << key.to_s
       currently_selected = [settings[key][:active]]
       sub_menu_actions = options.map { |op| ->{ new_settings[key] = op; currently_selected[0] = op } }
@@ -2270,10 +2287,13 @@ module WindowTemplates
                           #col1: col1,
                           #col2: col2,
                           padding: sub_menu_padding,
+                          padding_left: sub_menu_padding_left,
+                          padding_right: sub_menu_padding_right,
                           content: options,
                           actions: sub_menu_actions,
                           border_top: "-",
-                          border_side: "|"))
+                          border_side: "|",
+                          loop: true))
       
       #Create window that displays currently selected item from sub-menu
       sub_menu_displays << Window.new(height: 1,
@@ -2327,7 +2347,7 @@ module WindowTemplates
     end
 
     #Menu dimensions
-    menu_t = title_t + title_win.height
+    menu_t = title_t + title_win.height + 1
     menu_l = win_l + padding_left
     menu_h = win_h - title_win.height - button_set.height
     menu_w = sub_l - win_l - padding_left #(Changed not to overlap sub_menu_displays; old on right:) win_w - padding_left - padding_right
@@ -2489,7 +2509,8 @@ module WindowTemplates
     padding_top = args.fetch(:padding_top, nil) || padding
     padding_bottom = args.fetch(:padding_bottom, nil) || padding
 
-    screen = InteractiveScreen.new(args)
+    win_args = self.default_window_settings.merge(args)
+    screen = InteractiveScreen.new(win_args)
 
     
     title_h = 3
@@ -2582,7 +2603,7 @@ module WindowTemplates
     title_h = 3
     title_t = win_t + padding
     title_l = win_l + (win_w - (padding * 2) - game_title.length) / 2
-    game_title_display = self.window_title(col_hash.merge(title_width: game_title.length,
+    game_title_display = self.window_title(col_hash.merge(title_width: game_title.length + 2,
                                                           title_height: title_h,
                                                           title_top: title_t,
                                                           title_left: title_l,
@@ -2612,7 +2633,7 @@ module WindowTemplates
                                    
     $game_debug += "board_h: #{board_h}, board_w: #{board_w}, board_t: #{board_t}, board_l: #{board_l}\n"
 
-    mh_h = win_h - title_h - padding * 2
+    mh_h = win_h - title_h - padding * 2 - 2
     mh_w = board_l - win_l - padding * 2
     mh_t = title_t + game_title_display.height
     mh_l = win_l + padding
@@ -2665,7 +2686,19 @@ module WindowTemplates
                                             content: turn_display_input,
                                             lines: 1))
 
-    
+   
+    #Controls window
+    ctrl_win_h = 2
+    ctrl_win_w = win_w - padding * 2
+    ctrl_win_t = win_t + win_h - 3
+    ctrl_win_l = win_l + padding
+    ctrl_content = "Controls:\n Arrow Keys-> move cursor, Backspace-> deselect piece, Q-> quit game, S-> save game"
+    ctrl_win = Window.new(col_hash.merge(height: ctrl_win_h,
+                                         width: ctrl_win_w,
+                                         top: ctrl_win_t,
+                                         left: ctrl_win_l,
+                                         content: ctrl_content))
+    game_window.add_region(ctrl_win)
     game_window.add_region(game_title_display)
     game_window.add_region(board_map)
     game_window.add_region(move_history_feed[0])
