@@ -26,7 +26,7 @@ module Settings
   def self.possible_vars
     { "bkgd_color" => ["black", "red", "green", "yellow", "blue"],
       "board_color" => ["red", "b_yellow", "green", "b_blue", "b_magenta", "b_cyan"],
-      "theme" => ["black", "blue", "green", "purple", "yellow"] }
+      "theme" => ColorSchemes::THEMES.keys.map(&:to_s) }
   end
 
   def self.load

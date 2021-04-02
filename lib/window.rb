@@ -10,24 +10,27 @@ $window_debug = ""
 module ColorSchemes
   THEMES ||= { 
     :blue =>
-    { col1: [:black, :cyan],
-      col2: [:white, :cyan],
+    { col1: [:cyan, :blue],
+      col2: [:white, :blue],
       col3: [:black, :green],
-      board_color: :green,
+      bg_bg: :green,
+      board_dark_col: [:green, :green],
       board_highlight: :cyan },
 
-    :black =>
+    :radical =>
     { col1: [:yellow, :black],
       col2: [:white, :black],
       col3: [:red, :yellow],
-      board_color: :yellow,
-      board_highlight: :red },
+      bg_bg: :red,
+      board_dark_col: [:yellow, :yellow],
+      board_highlight: :red,
+      move_history_col2: [:red, :yellow] },
       
     :green =>
     { col1: [:magenta, :green],
       col2: [:white, :green],
       col3: [:white, :magenta],
-      board_color: :magenta,
+      board_dark_col: [:magenta, :magenta],
       board_highlight: :green,
       bg_bg: :magenta,
       field_col2: [:white, :magenta],
@@ -40,20 +43,35 @@ module ColorSchemes
     { col1: [:black, :magenta],
       col2: [:white, :magenta],
       col3: [:magenta, :b_green],
-      board_color: :green,
+      board_dark_col: [:green, :green],
       board_highlight: :magenta },
 
     :yellow =>
-    { col1: [:white, :yellow],
-      col2: [:black, :yellow],
+    { col1: [:black, :yellow],
+      col2: [:white, :yellow],
       col3: [:yellow, :black],
+      bg_bg: :white,
       title_col1: [:white, :yellow],
-      board_color: :cyan,
-      board_highlight: :yellow  }
+      board_dark_col: [:cyan, :cyan],
+      board_highlight: :yellow,
+      move_history_col2: [:white, :cyan]  },
+
+    :monochrome =>
+    { col1: [:black, :white],
+      col2: [:black, :white],
+      col3: [:white, :black],
+      bg_bg: :black,
+      board_dark_col: [:white, :black],
+      piece_col: :magenta,
+      board_base_col: :black  }
    }
 
   def self.get(theme)
-    return THEMES[theme.to_sym]
+    if THEMES.has_key?(theme.to_sym)
+      return THEMES[theme.to_sym]
+    else
+      return THEMES[:monochrome]
+    end
   end
 end
 
@@ -2401,14 +2419,19 @@ module WindowTemplates
     col_pair1 = args.fetch(:col1, nil)
     col1 = col_pair1 ? col_pair1[1] : :black
     col2 = :b_white
-    col3 = args.fetch(:board_color, nil) || :b_magenta
-    self.color_cmap(bg_map, col1: col1, col2: col2, col3: col3)
+    col3 = args.fetch(:col2, nil) || [:yellow, :b_magenta]
+
+    border_col = args.fetch(:board_base_col, nil) || col3[1] #one-square wide base surrounding board
+    light_col = args.fetch(:board_light_col, nil) || [:white, :white] #light square color (second value)
+    dark_col = args.fetch(:board_dark_col, nil) || [:b_magenta, :b_magenta] #light dark color (second value)
+
+    self.color_cmap(bg_map, col1: border_col, col2: light_col[1], col3: dark_col[1])
   end
 
   def self.game_board_fg_map(args = {})
-    fg_map = "  222333222333222333222333  \n" +
-             (("33                          \n" +
-               "22                          \n") * 4 ) +
+    fg_map = "  222333222333222333222333222  \n" +
+             (("331111111111111111111111111    \n" +
+               "221111111111111111111111111    \n") * 4 ) +
                "                            "
 =begin
     #color nums chosen to match bg_map
@@ -2420,10 +2443,10 @@ module WindowTemplates
 
     fg_map = fg_map.gsub(/[23]/, '2' => char2, '3' => char3)
 =end
-    col1 = :black
-    col2 = :white
-    col3 = args.fetch(:board_color, nil) || :b_magenta
-    self.color_cmap(fg_map, col1: col1, col2: col2, col3: col3)
+    piece_col = args.fetch(:piece_col, nil) || :black #color of all piece icons
+    light_col = args.fetch(:board_light_col, nil) || [:white, :white] #light square font color for rank/file markings (first val)
+    dark_col = args.fetch(:board_dark_col, nil) || [:b_magenta, :b_magenta] #dark square font color for rank/file markings (first val)
+    self.color_cmap(fg_map, col1: piece_col, col2: light_col[0], col3: dark_col[0])
   end
 
   def self.game_board(args = {})
@@ -2439,8 +2462,8 @@ module WindowTemplates
                 "                            \n"
     
     board_color = args.fetch(:board_color, nil) || :b_magenta
-    bg_map = self.game_board_bg_map(args)
-    fg_map = self.game_board_fg_map(args)
+    bg_map = self.game_board_bg_map(args.merge(self.color_set))
+    fg_map = self.game_board_fg_map(args.merge(self.color_set))
     #$game_debug += "bg_map is: #{bg_map}"
     #$game_debug += "fg_map is: #{fg_map}"
     arr = args.fetch(:board).arr 
@@ -2639,6 +2662,7 @@ module WindowTemplates
     mh_l = win_l + padding
     mh_lines = (mh_h - 1) / 2
     move_history_input = args.fetch(:move_history_input) || []
+    move_history_args = self.create_subhash(self.color_set, "move_history")
     move_history_feed = self.self_scrolling_feed(col_hash.merge(height: mh_h,
                                                  width: mh_w,
                                                  top: mh_t,
@@ -2649,7 +2673,7 @@ module WindowTemplates
                                                  lines: mh_lines,
                                                  item_padding: 1,
                                                  border_top: border_top, 
-                                                 border_side: border_side))
+                                                 border_side: border_side).merge(move_history_args))
     
     $game_debug += "mh_h: #{mh_h}, mh_w: #{mh_w}, mh_t: #{mh_t}, mh_l: #{mh_l}\n"
 
