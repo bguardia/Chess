@@ -383,7 +383,7 @@ def initialize_ui
   title_args = default_win_size.merge(top: title_top)
 
   screen.add_region(title_screen(title_args))
-  screen.add_region(start_menu(default_win_size))
+  screen.add_region(start_menu(default_win_size.merge(top: 25)))
   screen.update
   input_handler = InputHandler.new(in: screen)
 
