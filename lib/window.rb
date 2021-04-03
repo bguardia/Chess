@@ -9,12 +9,16 @@ $window_debug = ""
 
 module ColorSchemes
   THEMES ||= { 
-    :blue =>
-    { col1: [:cyan, :blue],
-      col2: [:white, :blue],
-      col3: [:black, :green],
-      bg_bg: :green,
-      board_dark_col: [:green, :green],
+    :waves =>
+    { col1: [:magenta, :cyan],
+      col2: [:white, :cyan],
+      col3: [:black, :magenta],
+      bg_bg: :magenta,
+      bg_fg: :cyan,
+      bg_bkgd: ["  )",  " ( "],
+      title_col2: [:black, :cyan],
+      board_base_col: :black,
+      board_dark_col: [:yellow, :yellow],
       board_highlight: :cyan },
 
     :radical =>
@@ -22,20 +26,24 @@ module ColorSchemes
       col2: [:white, :black],
       col3: [:red, :yellow],
       bg_bg: :red,
+      bg_fg: :yellow,
+      bg_bkgd: ["/ ","\\ "],
       board_dark_col: [:yellow, :yellow],
       board_highlight: :red,
       move_history_col2: [:red, :yellow] },
       
-    :green =>
-    { col1: [:magenta, :green],
+    :ninja_turtle =>
+    { col1: [:red, :green],
       col2: [:white, :green],
-      col3: [:white, :magenta],
-      board_dark_col: [:magenta, :magenta],
+      col3: [:white, :red],
+      board_dark_col: [:red, :red],
       board_highlight: :green,
-      bg_bg: :magenta,
-      field_col2: [:white, :magenta],
-      title_col1: [:green, :magenta],
-      title_col2: [:white, :magenta],
+      bg_bg: :green,
+      bg_fg: :black,
+      bg_bkgd: [" )(  )( ","(  )(  )"], 
+      field_col2: [:white, :red],
+      title_col1: [:green, :red],
+      title_col2: [:white, :red],
       title_border_top: "-",
       title_border_side: "|" },
 
@@ -43,6 +51,8 @@ module ColorSchemes
     { col1: [:black, :magenta],
       col2: [:white, :magenta],
       col3: [:magenta, :b_green],
+      bg_bkgd: "|",
+      bg_fg: :green,
       board_dark_col: [:green, :green],
       board_highlight: :magenta },
 
@@ -51,6 +61,8 @@ module ColorSchemes
       col2: [:white, :yellow],
       col3: [:yellow, :black],
       bg_bg: :white,
+      bg_fg: :yellow,
+      bg_bkgd: [" / \\ ","(   )", " \\ / "],
       title_col1: [:white, :yellow],
       board_dark_col: [:cyan, :cyan],
       board_highlight: :yellow,
@@ -60,7 +72,9 @@ module ColorSchemes
     { col1: [:black, :white],
       col2: [:black, :white],
       col3: [:white, :black],
-      bg_bg: :black,
+      bg_bg: :white,
+      bg_fg: :black,
+      bg_bkgd: "\\",
       board_dark_col: [:white, :black],
       piece_col: :magenta,
       board_base_col: :black  }
@@ -456,7 +470,7 @@ class Window
     @col3 = args.fetch(:col3, nil) || [:red, :black] #color of highlighted elements
     @fg = args.fetch(:fg, nil) || @col1[0]
     @bg = args.fetch(:bg, nil) || @col1[1]
-    @bkgd = args.fetch(:bkgd, nil) || " "
+    @bkgd = args.fetch(:bkgd, nil) || " " #pass a string or an array of strings for bkgd characters
 
     @border_top = args.fetch(:border_top, nil)
     @border_side = args.fetch(:border_side, nil)
@@ -469,9 +483,6 @@ class Window
 =end
     @border_win = nil #encapsulating window with border + padding
     @win = create_win #window to handle output
-
-    $window_debug += "Initialized window.\n@border_win: #{@border_win}\n" +
-                     "@win: #{@win}\n"
 
     post_initialize(args)
   end
@@ -605,10 +616,14 @@ class Window
     #fill_win(@border_win, @fg, @bg, @bkgd)
     col = Curses.color_pair(return_c_pair(@fg, @bg))
     y = 0
+
+    bkgd_chr_arr = [].push(@bkgd).flatten
+    multiplier = @width / @bkgd.length
     @height.times do
       @border_win.setpos(y, 0)
+      chr = bkgd_chr_arr[y % bkgd_chr_arr.length]
       @border_win.attron(col) do
-        @border_win.addstr( @bkgd * @width )
+        @border_win.addstr( chr * (@width/ chr.length) )
       end
       y += 1
     end
@@ -2610,7 +2625,7 @@ module WindowTemplates
 
     padding = 2
     win_h = 25 + padding * 2
-    win_w = 85 + padding * 2
+    win_w = 95 + padding * 2
     win_t = (game_screen.height - win_h) / 2
     win_l = (game_screen.width - win_w) / 2
     game_window = InteractiveScreen.new(col_hash.merge(height: win_h,
@@ -2642,22 +2657,9 @@ module WindowTemplates
 
     $game_debug += "title_h: #{title_h}, title_t: #{title_t}, title_l: #{title_l}\n"
 
-    board = args.fetch(:board) || Board.new
-    board_color = args.fetch(:board_color, nil) || :b_magenta 
-    board_arr = board.to_s.split("\n")
-    board_h = board_arr.length
-    board_w = 27 #board_arr[1].length
-    board_t = win_t + (win_h - padding * 2 - board_h) / 2 + title_h
-    board_l = win_l + (win_w - padding * 2 - board_w) / 2
-    board_map = self.game_board(args.merge(board: board,
-                                top: board_t,
-                                left: board_l,
-                                board_color: board_color))
-                                   
-    $game_debug += "board_h: #{board_h}, board_w: #{board_w}, board_t: #{board_t}, board_l: #{board_l}\n"
 
     mh_h = win_h - title_h - padding * 2 - 2
-    mh_w = board_l - win_l - padding * 2
+    mh_w = 31 #board_l - win_l - padding * 2
     mh_t = title_t + game_title_display.height
     mh_l = win_l + padding
     mh_lines = (mh_h - 1) / 2
@@ -2679,14 +2681,28 @@ module WindowTemplates
 
     mh_title_content = "Move History"
     mh_title_l = mh_l #+ (mh_w - mh_title_content.length) / 2
-    mh_t = title_t + 2
-    move_history_label = Window.new(col_hash.merge(top: mh_t,
+    mh_title_t = title_t + 2
+    move_history_label = Window.new(col_hash.merge(top: mh_title_t,
                                     left: mh_title_l,
                                     content: mh_title_content))
 
     $game_debug += "mh_title_l: #{mh_title_l}\n"
 
     message_input = args.fetch(:message_input) || []
+
+    board = args.fetch(:board) || Board.new
+    board_color = args.fetch(:board_color, nil) || :b_magenta 
+    board_arr = board.to_s.split("\n")
+    board_h = board_arr.length
+    board_w = 27 #board_arr[1].length
+    board_t = mh_t #win_t + (win_h - padding * 2 - board_h) / 2 + title_h
+    board_l = mh_l + mh_w + padding #win_l + (win_w - padding * 2 - board_w) / 2
+    board_map = self.game_board(args.merge(board: board,
+                                top: board_t,
+                                left: board_l,
+                                board_color: board_color))
+                                   
+    $game_debug += "board_h: #{board_h}, board_w: #{board_w}, board_t: #{board_t}, board_l: #{board_l}\n"
     mf_h = 3
     mf_w = mh_w
     mf_t = mh_t + mf_h 
@@ -2705,7 +2721,7 @@ module WindowTemplates
     turn_display_input = args.fetch(:turn_display_input) || []
     turn_display = self.self_scrolling_feed(col_hash.merge(height: mf_h,
                                             width: td_w,
-                                            top: mh_t,
+                                            top: mh_title_t,
                                             left: td_l,
                                             content: turn_display_input,
                                             lines: 1))
