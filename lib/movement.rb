@@ -97,7 +97,8 @@ module Movement
 
   #Special moves
   def en_passant(pawn, state)
-    current_rank = (pawn.current_pos[0] - pawn.starting_pos[0]).abs + 2
+    cur_pos = state.get_pos(pawn)
+    current_rank = (cur_pos[0] - pawn.starting_pos[0]).abs + 2
     if current_rank == 5
       en_passant = nil
       diag_forward = MovementArray.new(pawn, state).forward(1).and.horizontally(1).spaces
@@ -111,8 +112,8 @@ module Movement
           two_spaces_in_one_turn = state.get_previous_pos(adj_piece) == adj_piece.starting_pos
 
           if moved_last && two_spaces_in_one_turn
-            en_passant = [[self, self.current_pos, diag_forward[i]],
-                          [adj_piece, adj_piece.current_pos, nil]]
+            en_passant = [[pawn, cur_pos, diag_forward[i]],
+                          [adj_piece, adj_pos, nil]]
             break
           end
         end
@@ -477,9 +478,11 @@ module Movement
     pieces = board.get_pieces(args)
     #$game_debug += "pieces: #{pieces}\n"
     pieces.filter! do |piece|
-      can_reach = piece.can_reach?(pos)
+      moves = board.get_moves(id: piece.id)
+      moves.any? do |m|
+        m.include?(pos)
+      end
       #$game_debug += "for #{piece.class} (#{piece.id}): can_reach is #{can_reach}\n"
-      can_reach
     end
 
     #$game_debug += "pieces is now: #{pieces}\n"
@@ -701,8 +704,7 @@ module Movement
     piece = board.get_piece_at(piece_pos)
     return [EmptyMove.new] if piece.nil?
 
-    moves = piece.possible_moves
-
+    moves = board.get_moves(id: piece.id)
     #$game_debug += "Piece is: #{piece.class} (#{piece.id})\n"
     #$game_debug += "Moves are:\n"
     #moves.each do |mv|
@@ -862,6 +864,7 @@ class Move < Saveable
     end
   end
 
+  public
   def get_piece
     if @instructions
       @instructions.first.first

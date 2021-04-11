@@ -4,11 +4,8 @@ require 'board'
 
 
 def return_filled_board(pieces)
-  board = Board.new
-  pieces.each do |p|
-    p.add_to_board(board)
-  end
-  return board
+  state = State.new(pieces: pieces)
+  return state
 end
 
 def create_piece_stub(args = {})
@@ -49,8 +46,8 @@ describe Movement do
   describe "#moves" do
     it "creates and returns a new Movement::MovementArray" do
       pawn = create_piece_stub
-      board = Board.new
-      marr = moves(pawn, board)
+      state = State.new(pieces: [pawn])
+      marr = moves(pawn, state)
       expect(marr).to be_a_kind_of(Movement::MovementArray)
     end
   end
@@ -63,65 +60,8 @@ describe Movement do
       knight = create_piece_stub( type: "Knight", team: "white", pos: [4,7])
       dest = [2, 6]
       pieces = [bishop, pawn, knight]
-      board = Board.new
-      pieces.each { |p| p.add_to_board(board) }
+      board = return_filled_board(pieces) 
       expect(Movement.who_can_reach?(dest, board)).to match_array pieces
-    end
-  end
-
-  describe "#in_check?" do
-    it "returns true if given king is attackable by enemy piece" do
-      king = King.new(starting_pos: [7,4], team: "white")
-      rook = Rook.new(starting_pos: [4,4], team: "black")
-      board = Board.new
-      [king, rook].each { |p| p.add_to_board(board) }
-      expect(Movement.in_check?(king, board)).to be true
-    end
-
-    it "returns false if no piece can reach king" do
-      king = King.new(starting_pos: [7,4], team: "white")
-      rook = Rook.new(starting_pos: [3,3], team: "black")
-      board = Board.new
-      [king, rook].each { |p| p.add_to_board(board) }
-      expect(Movement.in_check?(king, board)).to be false
-    end
-
-    it "returns false if an attacking piece is blocked" do
-      king = King.new(starting_pos: [7,4], team: "white")
-      rook = Rook.new(starting_pos: [4,4], team: "black")
-      queen = Queen.new(starting_pos: [5,4], team: "white")
-      board = Board.new
-      [king, rook, queen].each { |p| p.add_to_board(board) }
-      expect(Movement.in_check?(king, board)).to be false
-    end
-  end
-
-  describe "#checkmate?" do
-    it "returns false if king isn't currently in check" do
-      king = King.new(starting_pos: [7,4], team: "white")
-      rook = Rook.new(starting_pos: [4,4], team: "black")
-      queen = Queen.new(starting_pos: [5,4], team: "white")
-      board = Board.new
-      [king, rook, queen].each { |p| p.add_to_board(board) }
-      expect(Movement.checkmate?(king, board)).to be false
-    end
-
-    it "returns false if check is escapable" do
-      king = King.new(starting_pos: [7,4], team: "white")
-      rook = Rook.new(starting_pos: [4,4], team: "black")
-      board = Board.new
-      [king, rook].each { |p| p.add_to_board(board) }
-      expect(Movement.checkmate?(king, board)).to be false 
-    end
-
-    it "returns true if check is inescapable" do
-      king = King.new(starting_pos: [7,7], team: "white")
-      rook = Rook.new(starting_pos: [7,3], team: "black")
-      bishop = Bishop.new(starting_pos: [5,5], team: "black")
-      pawn = Pawn.new(starting_pos: [6,7], team: "white")
-      board = Board.new(pieces: [king, rook, bishop, pawn])
-      puts board
-      expect(Movement.checkmate?(king, board)).to be true
     end
   end
 
@@ -131,8 +71,7 @@ describe Movement do
        rook = create_piece_stub(type: "Rook", pos: [7,0])
        queen = create_piece_stub(type: "Queen", pos: [5,0])
        dest = [4,0]
-       board = Board.new
-       [rook, queen].each { |p| p.add_to_board(board) }
+       board = return_filled_board([rook, queen])
        expect(Movement.blocked?(rook, dest, board)).to be true
      end
 
@@ -155,21 +94,10 @@ describe Movement do
    end
 
   describe Movement::MovementArray do
-=begin    
-    describe "#initialize" do
-      it "creates a new MovementArray with a given piece" do
-        some_coords = [1,5]
-        pawn = create_piece_stub(pos: some_coords)
-        marr = Movement::MovementArray.new(pawn)
-        expect(marr).to have_attributes( :piece => pawn )
-      end
-    end
-=end
    
-    def test_movement_methods(msg, ans_arr = [1,5,3])
-      piece = create_piece_stub 
-      board = Board.new
-      piece.add_to_board(board)
+    def test_movement_methods(msg, pos = [0,0], ans_arr = [1,5,3])
+      piece = create_piece_stub(pos: pos)
+      board = State.new(pieces: [piece]) 
       marr = Movement::MovementArray.new(piece, board)
       moves_arr = []
 
@@ -184,133 +112,108 @@ describe Movement do
 
     describe "#up" do
       it "accepts an integer, range of integers or array of integers" do
-        test_movement_methods(:up)
+        test_movement_methods(:up, [7,3])
       end
     end
 
     describe "#down" do
       it "accepts an integer, range of integers or array of integers" do
-        test_movement_methods(:down)
+        test_movement_methods(:down, [0,3])
       end
     end
 
     describe "#left" do
       it "accepts an integer, range of integers or array of integers" do 
-        test_movement_methods(:left)
+        test_movement_methods(:left, [3,7])
       end
     end
 
     describe "#right" do
       it "accepts an integer, range of integers or array of integers" do 
-        test_movement_methods(:right)
+        test_movement_methods(:right, [3,0])
       end
     end
 
     describe "#horizontally" do
       it "accepts an integer, range of integers or array of integers" do 
-        test_movement_methods(:horizontally, [2, 10, 6])
+        test_movement_methods(:horizontally, [3,3], [2, 7, 4])
       end
     end
 
     describe "#vertically" do
       it "accepts an integer, range of integers or array of integers" do 
-        test_movement_methods(:vertically, [2, 10, 6])
+        test_movement_methods(:vertically, [3,3], [2, 7, 4])
       end
     end
 
     describe "#diagonally" do
       it "accepts an integer, range of integers or array of integers" do 
-        test_movement_methods(:diagonally, [4, 20, 12])
+        test_movement_methods(:diagonally, [3,3], [4, 13, 8])
       end
     end
 
     describe "#and" do
       it "combines movements together to create a single movement" do
-        piece = create_piece_stub
-        board = Board.new
-        piece.add_to_board(board)
+        piece = create_piece_stub(pos: [7,7])
+        board = State.new(pieces: [piece])
         marr = Movement::MovementArray.new(piece, board)
         moves = marr.up(2).and.left(1).spaces(on_board: false)
-        expect(moves).to match_array [[-2, -1]]
+        expect(moves).to match_array [[5, 6]]
       end
     end
   
     describe "#or" do
       it "separates movements from one another" do
-        piece = create_piece_stub
-        board = Board.new
-        piece.add_to_board(board)
+        piece = create_piece_stub(pos: [3,3])
+        board = State.new(pieces: [piece])
         marr = Movement::MovementArray.new(piece, board)
         moves = marr.up(2).and.left(1).or.down(1).and.right(2).spaces(on_board: false)
-        expect(moves).to match_array [[-2,-1], [1, 2]]
+        expect(moves).to match_array [[1,2], [4, 5]]
       end
     end
 
     describe "#spaces" do
       it "#ends a movement chain, returning an array" do
         piece = create_piece_stub
-        board = Board.new
-        piece.add_to_board(board)
+        board = State.new(pieces: [piece])
         marr = Movement::MovementArray.new(piece, board)
         moves = marr.down(1).spaces
         expect(moves).to be_a_kind_of(Array)
       end
     end
   end
-end
 
-
-describe Pawn do
-  
-  describe "#special_moves" do
-    it "returns an diagonally adjacent squares in front of it that have an enemy piece" do
-      pawn = create_piece_stub(team: "white", pos: [4,4])
-      p2 = create_piece_stub(team: "black", pos: [3,3])
-      p3 = create_piece_stub(type: "Knight", team: "black", pos: [3,5])
-      board = Board.new
-      [pawn, p2, p3].each { |p| p.add_to_board(board) }
-
-      expect(pawn.special_moves).to match_array [[3,3], [3,5]]
-    end
-
-    it "returns en passant when applicable" do
-      pawn = Pawn.new(team: "white", starting_pos: [6,4]) 
-      p2 = Pawn.new(team: "black", starting_pos: [3,5]) 
-      allow(p2).to receive(:moved_last_turn?).and_return(true)
-      allow(p2).to receive(:starting_pos).and_return([1,5])
-      allow(p2).to receive(:previous_pos).and_return([1,5])
-      board = Board.new
-      [pawn, p2].each { |p| p.add_to_board(board) } 
-      board.move(pawn, [3,4])
-      board.move(p2, [3,5])
-      
-      expect(pawn.special_moves).to match_array [[2,5]]
+  describe "#en_passant" do
+    it "returns en_passant moves when applicable" do
+      p1 = Pawn.new(team: "white", starting_pos: [6,4]) 
+      p2 = Pawn.new(team: "black", starting_pos: [1,5]) 
+      statetree = StateTree.new(pieces:[p1, p2])
+      move1 = Move.new(move: [[p1, [6, 4], [4,4]]])
+      move2 = Move.new(move: [[p1, [4,4], [3,4]]])
+      move3 = Move.new(move: [[p2, [1,5], [3,5]]])
+      statetree.do!(move1)
+      statetree.do!(move2)
+      statetree.do!(move3)
+      got_move = en_passant(p1, statetree)
+      expect(got_move.length).to eq(1)
     end
   end
-end
 
-describe King do
-
-  describe "#special_moves" do
+  describe "#castling" do
     it "returns the spaces that the king can move when castling is available" do
       king = create_piece_stub(type: "King", team: "white", pos: [7, 4])
       rook = create_piece_stub(type: "Rook", team: "white", pos: [7, 0])
       rook2 = create_piece_stub(type: "Rook", team: "white", pos: [7, 7])
-      board = Board.new
-      [king, rook, rook2].each { |p| p.add_to_board(board) }
-      castle_positions = [ [7, 2], [7, 6] ]
-      expect(king.special_moves).to match_array castle_positions
+      board = State.new(pieces: [king, rook, rook2])
+      expect(castling(king, board).length).to eq(2) 
     end
 
     it "does not return a castle if king would be in check in any position in between" do
       king = create_piece_stub(type: "King", team: "white", pos: [7,4])
       rook = create_piece_stub(type: "Rook", team: "white", pos: [7,0])
       bishop = create_piece_stub(type: "Bishop", team: "black", pos: [5,1])
-      board = Board.new
-      [king, rook, bishop].each { |p| p.add_to_board(board) }
-      expect(king.special_moves).to match_array []
+      board = State.new(pieces: [king, rook, bishop])
+      expect(castling(king, board)).to match_array []
     end
   end
-
 end
-

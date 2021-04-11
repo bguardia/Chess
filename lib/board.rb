@@ -250,10 +250,10 @@ class StateTree < Saveable
     #$game_debug += "called statetree.do\n"
     #$game_debug += "Checking if child node for move already exists...\n"
     #$game_debug += "#{move}\n"
+    
+    temp_next_state = @current_node.data.do(move)
     next_state = @current_node.child_nodes.find do |node|
       state = node.data
-      #$game_debug += "child node is:\n #{state}\n"
-      #$game_debug += "last move is: \n#{state.last_move}\n"
       state.last_move == move
     end
 
@@ -355,8 +355,6 @@ class StateTree < Saveable
   end
 
   def checkmate?(team)
-    #$game_debug += "Called statetree.checkmate?\n"
-    #@current_node.data.checkmate?(team)
     state = @current_node.data
     return false unless in_check?(team: team)
     
@@ -378,10 +376,8 @@ class StateTree < Saveable
 
       #get spaces between king and attackers
       spaces_arr = []
-      #$game_debug += "Attackers are: \n"
       attacking_moves.each do |atkmv|
         attacker = atkmv.get_piece
-        #$game_debug += "#{attacker.team} #{attacker.class} (#{attacker.id})\n"
         spaces_between = []
         unless attacker.kind_of?(Knight)
           spaces_between = Movement.get_spaces_between(king.current_pos, attacker.current_pos)
@@ -391,12 +387,6 @@ class StateTree < Saveable
      end
      #get intersection of spaces (in case of multiple attackers 
      important_spaces = spaces_arr.reduce(spaces_arr[0]) { |a,b| a.intersection(b) }
-=begin
-    important_spaces = attackers.reduce([]) do |spaces, atk|
-      atk_pos = state.get_pos(atk)
-      spaces.concat(Movement.get_spaces_between(king_pos, atk_pos)).concat(atk_pos)
-    end
-=end
 
      ally_moves = get_moves(team: team).filter { |mv| !mv.blocked? }
      checkmate = !ally_moves.any? do |mv|
@@ -415,19 +405,7 @@ class StateTree < Saveable
        end
        blocks || king_escapes
      end
-=begin
-    checkmate = ally_pieces.all? do |p|
-      p_moves = p.possible_moves 
-      p_moves.all? do |mv|
-        if important_spaces.include?(mv.destination(p))
-          next_state = self.do(mv).data
-          check = next_state.in_check?(king: king)
-        else
-          true
-        end
-      end
-    end
-=end
+
     return checkmate
   end
 
@@ -698,6 +676,59 @@ class State < Saveable
   end
 
   def checkmate?(team)
+    state = self 
+    return false unless in_check?(team: team)
+    
+    #get team's king and check if king can escape on its own
+    king = state.get_pieces(type: "King", team: team)[0]
+    king_cant_escape = king.possible_moves.all? do |mv|
+      next_state = self.do(mv)
+      check = next_state.in_check?(king: king)
+    end
+
+    return false unless king_cant_escape
+
+    #get important spaces (spaces between king and attackers, and attacker positions)
+    king_pos = state.get_pos(king)
+    enemy_team = ["white", "black"].find { |t| t != king.team }
+    attacking_moves = state.get_moves(team: enemy_team).filter do |mv|
+        mv.include?(king_pos)
+    end
+
+      #get spaces between king and attackers
+      spaces_arr = []
+      attacking_moves.each do |atkmv|
+        attacker = atkmv.get_piece
+        spaces_between = []
+        unless attacker.kind_of?(Knight)
+          spaces_between = Movement.get_spaces_between(king.current_pos, attacker.current_pos)
+        end
+        spaces_between << attacker.current_pos
+        spaces_arr << spaces_between 
+     end
+     #get intersection of spaces (in case of multiple attackers 
+     important_spaces = spaces_arr.reduce(spaces_arr[0]) { |a,b| a.intersection(b) }
+
+     ally_moves = get_moves(team: team).filter { |mv| !mv.blocked? }
+     checkmate = !ally_moves.any? do |mv|
+       #$game_debug += "#{mv}\n"
+       blocks = false
+       king_escapes = false
+       piece = mv.get_piece
+       unless piece.kind_of?(King)
+         blocks = important_spaces.any? do |space|
+            mv.destination(piece) == space
+         end
+       else
+        temp_state = state.do(mv)
+        king_escapes = !temp_state.in_check?(king: king)
+        #$game_debug += "Move:\n #{mv}\n king_escapes: #{king_escapes}\n"
+       end
+       blocks || king_escapes
+     end
+
+    return checkmate
+=begin
     attackers = in_check?(team: team)
     return false unless attackers
     
@@ -739,6 +770,7 @@ class State < Saveable
 
     @checkmate[team] = checkmate
     return checkmate
+=end
   end
 
   def to_s
@@ -758,37 +790,6 @@ class State < Saveable
   def ignore_on_serialization
     ["@positions"]
   end
-=begin
-  def to_json
-
-    pieces_hash = {}
-    @pieces.each_pair do |key, val|
-      key_json = key.to_json
-      pieces_hash[key_json] = val
-    end
-
-    state_hash = { "pieces" => pieces_hash,
-                   "last_move" => @last_move,
-                   "check" => @check,
-                   "checkmate" => @checkmate }
-
-    return state_hash.to_json
-  end
-
-  def self.from_json(json)
-    data = JSON.load json
-    
-    pieces_hash = {}
-    data["pieces"].each_pair do |key, val|
-      pieces_hash[Piece.from_json(key)] = val
-    end
-
-    return State.new(pieces_hash: pieces_hash,
-                     check: data["check"],
-                     checkmate: data["checkmate"],
-                     last_move: data["last_move"])
-  end
-=end
 
 end
 

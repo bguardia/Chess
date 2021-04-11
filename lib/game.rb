@@ -4,11 +4,10 @@ $game_debug = ""
 
 class Game < Saveable
 
- attr_reader :players, :board #, :sets 
+ attr_reader :players, :board 
 
  def initialize(args = {})
    @players = args.fetch(:players, false) || create_players
-   #@sets = args.fetch(:sets, false) || create_sets
    @gamestate = args.fetch(:gamestate, false) || set_gamestate
    @current_player = args.fetch(:current_player, nil)
    @move_history = args.fetch(:move_history, [])
@@ -17,72 +16,12 @@ class Game < Saveable
    set_ui(args)
  end
 
- public
- def set_ui(args)
-   @io_stream = args.fetch(:io_stream, nil)
-   @move_history_input = args.fetch(:move_history_input, nil)
-   @turn_display_input = args.fetch(:turn_display_input, nil)
-   @board = args.fetch(:board, nil) || Board.new
-   @message_input = args.fetch(:message_input, nil)
- end
-
  def create_players
    [ Player.new, Player.new ]
  end
  
  def create_sets
    [ Pieces.new_set("white"), Pieces.new_set("black") ]
- end
-
- def set_gamestate
-  pieces = create_sets.flatten
-  #$game_debug += "called set_gamestate\n"
-  #$game_debug += "pieces: \n#{pieces}"
-  StateTree.new(pieces: pieces)
- end
-
- def update_turn_display(current_player, turn)
-   @turn_display_input[0] =  "#{current_player.team.capitalize}'s Turn (#{turn})"
- end
-
- def update_move_history(move)
-   #load move_history into input array if sizes don't match
-   if @move_history_input
-   if @move_history.length != @move_history_input.length
-     @move_history.each_index do |i|
-       if @move_history_input.length - 1 >= i
-         @move_history_input[i] = @move_history[i]
-       else
-         @move_history_input << @move_history[i]
-       end
-     end
-   end
-   end
-
-   note = ChessNotation.move_to_notation(move, @gamestate)
-  
-   l = @move_history.length
-   if @turn_num == l 
-     @move_history[@turn_num - 1] += " #{note}"
-     if @move_history_input
-       @move_history_input[@turn_num - 1] += " #{note}"
-     end
-   else
-     @move_history << "#{@turn_num} #{note}"
-     if @move_history_input
-       @move_history_input << "#{@turn_num} #{note}"
-     end
-   end
- end
-
- def break_game_loop
-   #$game_debug += "Called break_game_loop\n"
-   @break_game_loop = true
- end
-
- def game_over?
-   #$game_debug += "Called game_over? \n"
-   return @gamestate.checkmate?(@current_player.team)
  end
 
  def start
@@ -123,10 +62,89 @@ class Game < Saveable
    @gamestate.notify_observers
  end
 
+=begin
+ ///////////////////////////////////////////////////////////////
+ Public Setter Functions
+ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+=end
+
+ public
+ def set_ui(args)
+   @io_stream = args.fetch(:io_stream, nil)
+   @move_history_input = args.fetch(:move_history_input, nil)
+   @turn_display_input = args.fetch(:turn_display_input, nil)
+   @board = args.fetch(:board, nil) || Board.new
+   @message_input = args.fetch(:message_input, nil)
+ end
+
+
+ def set_gamestate
+  pieces = create_sets.flatten
+  StateTree.new(pieces: pieces)
+ end
+
+=begin
+ /////////////////////////////////////////////////////////////////
+ Periodic Update Functions/UI Related Functions
+ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+=end
+
+ def update_turn_display(current_player, turn)
+   @turn_display_input[0] =  "#{current_player.team.capitalize}'s Turn (#{turn})"
+ end
+
+ def update_move_history(move)
+   #load move_history into input array if sizes don't match
+   if @move_history_input
+   if @move_history.length != @move_history_input.length
+     @move_history.each_index do |i|
+       if @move_history_input.length - 1 >= i
+         @move_history_input[i] = @move_history[i]
+       else
+         @move_history_input << @move_history[i]
+       end
+     end
+   end
+   end
+
+   note = ChessNotation.move_to_notation(move, @gamestate)
+  
+   l = @move_history.length
+   if @turn_num == l 
+     @move_history[@turn_num - 1] += " #{note}"
+     if @move_history_input
+       @move_history_input[@turn_num - 1] += " #{note}"
+     end
+   else
+     @move_history << "#{@turn_num} #{note}"
+     if @move_history_input
+       @move_history_input << "#{@turn_num} #{note}"
+     end
+   end
+ end
+
  def update_turn_num
    if @current_player.team == "white"
      @turn_num += 1
    end
+ end
+
+ def change_current_player
+   @current_player = @players.find { |p| p != @current_player }
+ end
+
+ def break_game_loop
+   @break_game_loop = true
+ end
+
+=begin
+ //////////////////////////////////////////////////////////
+ Main Gameplay Functions
+ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+=end
+
+ def game_over?
+   return @gamestate.checkmate?(@current_player.team)
  end
 
  def play
@@ -154,9 +172,6 @@ class Game < Saveable
    end
  end
 
- def change_current_player
-   @current_player = @players.find { |p| p != @current_player }
- end
 
  def player_turn(player = @current_player)
    move = nil
@@ -187,6 +202,12 @@ class Game < Saveable
      @message_input << "#{player.team.capitalize} moves #{piece} to #{ChessNotation.pos_notation(pos)}."
    end
  end
+
+=begin
+ ////////////////////////////////////////////////////////////////
+ Functions that involve Move Logic (Promotions, Validation, etc.)
+ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+=end
 
  def highlight_moves(piece, win)
    return nil unless piece
@@ -263,19 +284,6 @@ class Game < Saveable
      return false
    end
 
-   #Must be a possible move of the piece
-=begin
-   unless piece.can_reach?(pos)
-     @message_input << "#{piece.to_s} cannot move there."
-     return false
-   end
-
-   #Must not move to a square occupied by a friendly piece
-   if removed && piece.team == removed.team
-     @message_input << "Destination is occupied by a friendly piece."
-     return false
-   end
-=end
    @message_input << ""
    return true
  end
@@ -287,6 +295,12 @@ class Game < Saveable
    #
  end
 
+=begin
+  //////////////////////////////////////////////////////////////
+  Saving and Loading Functions
+  \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+=end
+
  def ignore_on_serialization
    ["@io_stream",
     "@board",
@@ -297,12 +311,6 @@ class Game < Saveable
  end
 
  def save
-=begin
-   f = File.new('my_save.txt', 'a')
-   f.puts to_json
-   f.close 
-   exit
-=end
    save_title = "#{@players[0].name} vs. #{@players[1].name}"
    notation = @move_history.reduce([]) do |arr, str| 
      subarr = str.split(' ')
@@ -354,6 +362,16 @@ module ChessNotation
                  "Queen" => "Q",
                  "King" => "K",
                  "Rook" => "R" }
+
+=begin
+  /////////////////////////////////////////////////
+  Move to Notation Functions
+  \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+=end
+   #main public interface
+   def self.move_to_notation(move, state)
+     notation = self.unravel_move(move, state)
+   end
 
    def self.translate_move(prev_pos, new_pos, board)
      piece = board.get_piece_at(prev_pos)
@@ -434,34 +452,6 @@ module ChessNotation
 
    end
 
-   def self.move_to_notation(move, state)
-     notation = self.unravel_move(move, state)
-   end
-
-   #public interface from game move to chess notation
-   def self.to_notation(prev_pos, new_pos, state)
-     piece = state.get_piece_at(prev_pos)
-     new_pos_piece = state.get_piece_at(new_pos)
-
-     #check for castle
-     if piece.kind_of?(King) && (prev_pos[1] - new_pos[1]).abs > 1
-       return castle_notation(piece, prev_pos, new_pos)
-     end
-    
-     #check for piece capture
-     if new_pos_piece && new_pos_piece.team != piece.team
-       cap_char = "x"
-     else
-       cap_char = ""
-     end
-    
-     #get clarifying detail if necessary
-     extra = clarify_notation(piece, new_pos, state)
-     
-     #notation string
-     to_piece_char(piece) + extra + cap_char + to_file(new_pos) + to_rank(new_pos).to_s
-   end
-
    #create castle notation
    def self.castle_notation(piece, prev_pos, new_pos)
      if new_pos[1] < prev_pos[1] #queenside
@@ -519,6 +509,57 @@ module ChessNotation
      "#{self.to_file(pos)}#{self.to_rank(pos)}"
    end
 
+=begin
+  //////////////////////////////////////////////////////
+  Notation to Move Functions
+  \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+=end
+
+   #main public interface for notation to move translations
+   def self.from_notation(note, state)
+     #$game_debug += "note before clean: #{note}\n"
+     note = clean(note)
+     #$game_debug += "note after clean: #{note}\n"
+     return nil if note.nil?
+
+     #If castle notation, run separate function
+     return from_castle_notation(note) if note.start_with?("O-O")
+
+     #break down note into individual pieces
+     note_hash = decomp_note(note)
+     p = note_hash[:piece]
+     dtl = note_hash[:detail]
+     capture = note_hash[:capture]
+     r = note_hash[:rank]
+     f = note_hash[:file]
+     pos = [from_rank(r), from_file(f)]
+ 
+     #Get pieces of the same type who can reach the position
+     possible_pieces = Movement.who_can_reach?(pos, state, type: p)
+     if possible_pieces.length > 1
+       #Remove any pieces of the non-active team
+       possible_pieces.select! { |p| p.team == state.get_active_team }
+       #If still multiple pieces, check the clarifying detail
+       if possible_pieces.length > 1
+         possible_pieces.select! do |p|
+           current_pos = state.get_pos(p)
+           current_pos[0] == dtl[0] || current_pos[1] == dtl[1]
+         end
+       end
+     elsif possible_pieces.length == 0
+       return nil
+     end
+     piece = possible_pieces[0]
+     #Return move
+     move_hash = { piece: piece, 
+                   prev_pos: state.get_pos(piece), 
+                   pos: pos, 
+                   capture: capture,
+                   removed: state.get_piece_at(pos) }
+     #$game_debug += "move_hash:\n#{move_hash}\n"
+     move = Movement.return_move(state.get_pos(piece), pos, state)[0]
+   end
+
    #break down an individual note into its components
    def self.decomp_note(note)
      note_hash = {}
@@ -571,51 +612,6 @@ module ChessNotation
      end
    end
 
-   def self.from_notation(note, state)
-     #$game_debug += "note before clean: #{note}\n"
-     note = clean(note)
-     #$game_debug += "note after clean: #{note}\n"
-     return nil if note.nil?
-
-     #If castle notation, run separate function
-     return from_castle_notation(note) if note.start_with?("O-O")
-
-     #break down note into individual pieces
-     note_hash = decomp_note(note)
-     p = note_hash[:piece]
-     dtl = note_hash[:detail]
-     capture = note_hash[:capture]
-     r = note_hash[:rank]
-     f = note_hash[:file]
-     pos = [from_rank(r), from_file(f)]
-
-     #Get pieces of the same type who can reach the position
-     possible_pieces = Movement.who_can_reach?(pos, state, type: p)
-     if possible_pieces.length > 1
-       #Remove any pieces of the non-active team
-       possible_pieces.select! { |p| p.team == state.get_active_team }
-       #If still multiple pieces, check the clarifying detail
-       if possible_pieces.length > 1
-         possible_pieces.select! do |p|
-           current_pos = state.get_pos(p)
-           current_pos[0] == dtl[0] || current_pos[1] == dtl[1]
-         end
-       end
-     elsif possible_pieces.length == 0
-       return nil
-     end
-     piece = possible_pieces[0]
-     #Return move
-     move_hash = { piece: piece, 
-                   prev_pos: state.get_pos(piece), 
-                   pos: pos, 
-                   capture: capture,
-                   removed: state.get_piece_at(pos) }
-     #$game_debug += "move_hash:\n#{move_hash}\n"
-
-     move = Movement.return_move(state.get_pos(piece), pos, state)[0]
-   end
-
    #return any clarifying notes if piece & move combo are unclear
    #otherwise returns an empty string
    def self.clarify_notation(piece, dest_pos, state)
@@ -641,7 +637,7 @@ module ChessNotation
 
      #Return file if rank is same, rank otherwise
      piece_pos = state.get_pos(piece)
-     other_pos = state.get_pos(piece)
+     other_pos = state.get_pos(other)
      if other_pos[0] == piece_pos[0]
        f = to_file(piece_pos)
        $game_debug +=" returning #{f}\n"
