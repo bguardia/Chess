@@ -14,6 +14,7 @@ class Game < Saveable
    @turn_num = args.fetch(:turn_num, 1)
    @break_game_loop = false
    set_ui(args)
+   initialize_gamestate
  end
 
  def create_players
@@ -31,7 +32,7 @@ class Game < Saveable
      @current_player = @players[0]
    end
 
-   initialize_gamestate 
+   #initialize_gamestate 
   
    @input_handler = InputHandler.new(in: @io_stream)
    @players.each do |p|
@@ -198,7 +199,7 @@ class Game < Saveable
      update_move_history(move)
      piece = move.get_piece
      pos = move.destination(piece)
-     $game_debug += "pos: #{pos}, note: #{ChessNotation.pos_notation(pos)}\n"
+     #$game_debug += "pos: #{pos}, note: #{ChessNotation.pos_notation(pos)}\n"
      @message_input << "#{player.team.capitalize} moves #{piece} to #{ChessNotation.pos_notation(pos)}."
    end
  end
@@ -334,11 +335,11 @@ class Game < Saveable
    @players = save_data.fetch(:players)
    @current_player = @players.find { |p| p.team = "white" }
    notation = save_data.fetch(:notation)
-
+=begin
    piece_observer = Observer.new(to_do: ->(state) { Piece.update_pieces(state) })
    @gamestate.add_observer(piece_observer)
    @gamestate.notify_observers
-
+=end
    notation.each do |note|
      #$game_debug += "note is: #{note}\n"
      move = ChessNotation.from_notation(note, @gamestate)
