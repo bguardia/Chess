@@ -539,7 +539,7 @@ class State < Saveable
     pieces_hash = {}
     pieces.each do |piece|
       pieces_hash[piece] = { :prev_pos => piece.starting_pos,
-                             :pos => initial ? piece.starting_pos : piece.current_pos,
+                             :pos => piece.current_pos, 
                              :moved => initial ? false : piece.moved }
     end
 
