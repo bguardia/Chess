@@ -267,7 +267,9 @@ class Game < Saveable
        move = moves.first
      end
    end
-
+   if move.nil?
+     move = EmptyMove.new
+   end
    return move
  end
  
