@@ -103,6 +103,8 @@ class Saveable
       when String
         if Saveable.is_json?(val)
           Saveable.from_json(val) #load json string
+        elsif val == val.to_i.to_s #string is a number
+          val.to_i
         else
           val
         end
