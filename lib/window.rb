@@ -10,16 +10,19 @@ $window_debug = ""
 module ColorSchemes
   THEMES ||= { 
     :waves =>
-    { col1: [:magenta, :cyan],
+    { col1: [:black, :cyan],
       col2: [:white, :cyan],
-      col3: [:black, :magenta],
-      bg_bg: :magenta,
+      col3: [:yellow, :blue],
+      bg_bg: :blue,
       bg_fg: :cyan,
       bg_bkgd: ["  )",  " ( "],
-      title_col2: [:black, :cyan],
+      title_col2: [:white, :cyan],
       board_base_col: :black,
       board_dark_col: [:yellow, :yellow],
-      board_highlight: :cyan },
+      board_highlight: :cyan,
+      move_history_col2: [:white, :yellow],
+      title_border_top: "-",
+      title_border_side: "|" },
 
     :radical =>
     { col1: [:yellow, :black],
@@ -30,7 +33,9 @@ module ColorSchemes
       bg_bkgd: ["/ ","\\ "],
       board_dark_col: [:yellow, :yellow],
       board_highlight: :red,
-      move_history_col2: [:red, :yellow] },
+      move_history_col2: [:red, :yellow],
+      title_border_top: "-",
+      title_border_side: "|" },
       
     :ninja_turtle =>
     { col1: [:red, :green],
@@ -54,7 +59,9 @@ module ColorSchemes
       bg_bkgd: "|",
       bg_fg: :green,
       board_dark_col: [:green, :green],
-      board_highlight: :magenta },
+      board_highlight: :magenta,
+      title_border_top: "-",
+      title_border_side: "|" },
 
     :yellow =>
     { col1: [:black, :yellow],
@@ -66,7 +73,9 @@ module ColorSchemes
       title_col1: [:white, :yellow],
       board_dark_col: [:cyan, :cyan],
       board_highlight: :yellow,
-      move_history_col2: [:white, :cyan]  },
+      move_history_col2: [:white, :cyan],
+      title_border_top: "-",
+      title_border_side: "|"  },
 
     :monochrome =>
     { col1: [:black, :white],
@@ -77,7 +86,9 @@ module ColorSchemes
       bg_bkgd: "\\",
       board_dark_col: [:white, :black],
       piece_col: :magenta,
-      board_base_col: :black  }
+      board_base_col: :black,
+      title_border_top: "-",
+      title_border_side: "|"  }
    }
 
   def self.get(theme)
@@ -618,12 +629,13 @@ class Window
     y = 0
 
     bkgd_chr_arr = [].push(@bkgd).flatten
-    multiplier = @width / @bkgd.length
     @height.times do
       @border_win.setpos(y, 0)
       chr = bkgd_chr_arr[y % bkgd_chr_arr.length]
       @border_win.attron(col) do
-        @border_win.addstr( chr * (@width/ chr.length) )
+        multiplier = @width / chr.length
+        left_over = @width - chr.length * multiplier 
+        @border_win.addstr( (chr * multiplier) + chr[0, left_over] )
       end
       y += 1
     end
