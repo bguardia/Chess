@@ -7,6 +7,63 @@ require './lib/piece.rb'
 
 $window_debug = ""
 
+module WindowUtil
+
+  def self.lines
+    @@lines ||= self.detect_terminal_size[1]
+  end
+
+  def self.lines=(lines)
+    @@lines = lines
+  end
+
+  def self.cols
+    @@cols ||= self.detect_terminal_size[0]
+  end
+
+  def self.cols=(cols)
+    @@cols = cols
+  end
+
+  #command_exists? and detect_terminal_size are based on utility functions from Hirb framework. 
+  #See on git here: https://github.com/cldwalker/hirb/blob/master/lib/hirb/util.rb#L61-71
+  def self.command_exists?(command)
+      ENV['PATH'].split(File::PATH_SEPARATOR).any? {|d| File.exist? File.join(d, command) }
+  end
+
+  #gets terminal size for a variety of different environmets
+  def self.detect_terminal_size
+    if (ENV['COLUMNS'] =~ /^\d+$/) && (ENV['LINES'] =~ /^\d+$/)
+      [ENV['COLUMNS'].to_i, ENV['LINES'].to_i]
+    elsif (RUBY_PLATFORM =~ /java/ || (!STDIN.tty? && ENV['TERM'])) && self.command_exists?('tput')
+      [`tput cols`.to_i, `tput lines`.to_i]
+    elsif STDIN.tty? && self.command_exists?('stty')
+      `stty size`.scan(/\d+/).map { |s| s.to_i }.reverse
+    else
+      nil
+    end
+  rescue
+    nil
+  end
+
+  def self.update_dimensions
+    @@lines = @@cols = nil
+  end
+
+  def self.large_enough?(l, c)
+    if self.lines >= l && self.cols >= c
+      return false
+    end
+  end
+
+  def self.on_resize
+    self.update_dimensions
+    Curses.resizeterm(self.lines, self.cols)
+    Curses.stdscr.resize(self.lines, self.cols)
+    Curses.stdscr.refresh
+  end
+end
+
 module ColorSchemes
   THEMES ||= { 
     :waves =>
@@ -476,6 +533,7 @@ class Window
       @left = args.fetch(:left, 0)
     end
 
+    #Color-related instance variables
     @col1 = args.fetch(:col1, nil) || [:black, :white] #color of border and padded area of windows
     @col2 = args.fetch(:col2, nil) || @col1 #color of window content
     @col3 = args.fetch(:col3, nil) || [:red, :black] #color of highlighted elements
@@ -485,21 +543,67 @@ class Window
 
     @border_top = args.fetch(:border_top, nil)
     @border_side = args.fetch(:border_side, nil)
-=begin
-    $window_debug += "Initializing #{self.class}:\n@height: #{@height}\n" +
-                     "@width: #{@width}\n@top: #{@top}\n@left: #{@left}\n" +
-                     "@padding: #{@padding}\n@padding_left: #{@padding_left}\n" +
-                     "@padding_right: #{@padding_right}\n@padding_top: #{@padding_top}\n" +
-                     "@padding_bottom: #{@padding_bottom}\n"
-=end
-    @border_win = nil #encapsulating window with border + padding
-    @win = create_win #window to handle output
 
+    #Do not initialize window if :init_win is set to false
+    if args.fetch(:init_win, true)    
+      $game_debug += "#{self.class} dimensions before fit_to_screen:\nheight: #{@height}, width: #{@width}, top: #{@top}, left: #{@left}\n"
+      fit_to_screen
+      $game_debug += "dimensions after fit_to_screen:\nheight: #{@height}, width: #{@width}, top: #{@top}, left: #{@left}\n"
+      @border_win = nil #encapsulating window with border + padding
+      @win = create_win #window to handle output
+    end
+
+    #Call initialize method of child classes
     post_initialize(args)
   end
 
   private
   def post_initialize(args); end
+
+  public
+  def fit_to_screen(args = {})
+    screen_t = args.fetch(:top, nil) || 0
+    screen_l = args.fetch(:left, nil) || 0
+    screen_h = args.fetch(:height, nil) || WindowUtil.lines 
+    screen_w = args.fetch(:width, nil) || WindowUtil.cols
+
+    win_bottom = @top + @height
+    win_right = @left + @width
+    over_h = win_bottom - screen_h
+    over_w = win_right - screen_w
+
+    if over_h > 0 
+      if @top - over_h >= screen_t
+        @top -= over_h
+      elsif
+        over_h -= @top
+        @top = screen_t
+        vert_padding = @padding_top + @padding_bottom
+        while vert_padding > 0 && over_h > 0
+          over_h -= 1
+          vert_padding -= 1
+        end
+        @height -= over_h
+        @padding_top = @padding_bottom = vert_padding / 2
+      end
+    end
+
+    if over_w > 0
+      if @left - over_w >= screen_l
+        @left -= over_w
+      elsif
+        over_w -= @left
+        @left = screen_l
+        horz_padding = @padding_left + @padding_right
+        while horz_padding > 0 && over_w > 0
+          over_w -= 1
+          horz_padding -= 1
+        end
+        @width -= over_w
+        @padding_left = @padding_right = horz_padding / 2
+      end
+    end
+  end
 
   private
   def determine_height_of(content = @content)
@@ -542,6 +646,20 @@ class Window
 
       return max_width 
     end
+  end
+
+  def calculate_dimension(dim_str, size)
+    dim = self.instance_variable_get("@#{dim_str}")
+  
+    if size.kind_of?(String) && size.end_with?("%")
+      size = dim * (size[0...-1].to_f / 100)
+    end
+
+    if size > dim
+      size = dim
+    end
+
+    return size
   end
 
   public
@@ -599,6 +717,14 @@ class Window
   def clear
     @win.erase
     @content = ""
+  end
+
+  def resize(l, c)
+    inner_l = l - @padding_top - @padding_bottom
+    inner_c = c - @padding_left - @padding_right
+    @win.resize(inner_l,inner_c)
+    @border_win.resize(l, c)
+    update
   end
 
   def create_win
@@ -737,8 +863,22 @@ class Screen < Window
 
   def post_post_initialize(args); end
 
-  def add_region(rgn)
+  def add_region(rgn, args = {})
     @regions << rgn
+    fit_element_to_self(rgn, args)
+  end
+
+  def resize(l,c)
+    super(l,c)
+  end
+
+  def fit_element_to_self(rgn, args)
+    h = calculate_dimension("height", args.fetch(:height, nil) || rgn.height)
+    w = calculate_dimension("width", args.fetch(:width, nil) || rgn.width)
+    rgn.fit_to_screen(height: h,
+                      width: w,
+                      top: self.top,
+                      left: self.left)
   end
 
   def win_update
@@ -1629,11 +1769,11 @@ module WindowTemplates
   end
 
   def self.screen_height
-    @@screen_height ||= Curses.lines
+    WindowUtil.lines 
   end
 
   def self.screen_width
-    @@screen_width ||= Curses.cols
+    WindowUtil.cols
   end
 
   def self.fullscreen_window_settings
@@ -2042,10 +2182,6 @@ module WindowTemplates
   end
 
   def self.menu_two(args = {})
-    win_h = args.fetch(:height)
-    win_w = args.fetch(:width)
-    win_t = args.fetch(:top)
-    win_l = args.fetch(:left)
 
     col1 = args.fetch(:col1, [:white, :black])
     col2 = args.fetch(:col2, [:red, :yellow])
@@ -2053,11 +2189,6 @@ module WindowTemplates
     actions = args.fetch(:actions, nil)
     
    
-    padding = args.fetch(:padding, nil) || 1
-    padding_top = args.fetch(:padding_top, nil) || padding
-    padding_left = args.fetch(:padding_left, nil) || padding
-    padding_right = args.fetch(:padding_right, nil) || padding
-    padding_bottom = args.fetch(:padding_bottom, nil) || padding
     
     win_args = self.default_window_settings.merge(args)
     menu_screen = InteractiveScreen.new(win_args.merge(#height: win_h,
@@ -2068,6 +2199,17 @@ module WindowTemplates
                                                    border_top: "-",
                                                    border_side: "|"))
 
+    win_h = menu_screen.height
+    win_w = menu_screen.width
+    win_t = menu_screen.top
+    win_l = menu_screen.left
+
+    padding = args.fetch(:padding, nil) || 1
+    padding_top = args.fetch(:padding_top, nil) || padding
+    padding_left = args.fetch(:padding_left, nil) || padding
+    padding_right = args.fetch(:padding_right, nil) || padding
+    padding_bottom = args.fetch(:padding_bottom, nil) || padding
+    
     #$game_debug += "Created menu screen\n"
     title_h = 3
     title_w = win_w - (padding * 2)
@@ -2432,17 +2574,7 @@ module WindowTemplates
              (("1122233322233322233322233311\n" +
                "1133322233322233322233322211\n") * 4) +
                "1111111111111111111111111111\n"
-=begin
-    color_char_hash = Highlighting::COLOR_CODES.invert
-    col1 = args.fetch(:col1, nil) || :black
-    col2 = args.fetch(:col2, nil) || :b_white
-    col3 = args.fetch(:col3, nil) || :b_magenta
-    char1 = color_char_hash[col1]
-    char2 = color_char_hash[col2]
-    char3 = color_char_hash[col3]
 
-    bg_map = bg_map.gsub(/[123]/, '1' => char1, '2' => char2, '3' => char3)
-=end
     col_pair1 = args.fetch(:col1, nil)
     col1 = col_pair1 ? col_pair1[1] : :black
     col2 = :b_white
@@ -2460,16 +2592,6 @@ module WindowTemplates
              (("331111111111111111111111111    \n" +
                "221111111111111111111111111    \n") * 4 ) +
                "                            "
-=begin
-    #color nums chosen to match bg_map
-    color_char_hash = Highlighting::COLOR_CODES.invert
-    col2 = args.fetch(:col2, nil) || :b_white
-    col3 = args.fetch(:col3, nil) || :b_magenta
-    char2 = color_char_hash[col2]
-    char3 = color_char_hash[col3]
-
-    fg_map = fg_map.gsub(/[23]/, '2' => char2, '3' => char3)
-=end
     piece_col = args.fetch(:piece_col, nil) || :black #color of all piece icons
     light_col = args.fetch(:board_light_col, nil) || [:white, :white] #light square font color for rank/file markings (first val)
     dark_col = args.fetch(:board_dark_col, nil) || [:b_magenta, :b_magenta] #dark square font color for rank/file markings (first val)

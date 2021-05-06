@@ -339,57 +339,104 @@ def title_screen(args = {})
 end
 
 
+def resize_prompt
+  l = Curses.lines
+  c = Curses.cols
+
+  $game_debug += "Curses.lines is: #{l}, Curses.cols is: #{c}\n"
+  title = "Window Too Small"
+  str = "Your screen is less than the recommended size of 29 lines by 99 columns. Would you like to resize the window?"
+  prompt = WindowTemplates.confirmation_screen(title_content: title,
+                                               content: str,
+                                               height: Curses.lines,
+                                               width: Curses.cols,
+                                               top: 0,
+                                               left: 0)
+  prompt.update
+
+  Signal.trap('SIGWINCH') do
+    WindowUtil.on_resize
+    prompt.resize(WindowUtil.lines, WindowUtil.cols)
+    prompt.update
+    Curses.refresh
+  end
+
+  input = InputHandler.new(in: prompt).get_input
+
+  $game_debug += "input from prompt is: #{input}\n"
+  if input == 1
+    size = WindowUtil.detect_terminal_size
+    l = size[1]
+    c = size[0]
+    $game_debug += "Curses.lines is: #{l}, Curses.cols is: #{c}\n"
+    Curses.resizeterm(l,c)
+    Curses.stdscr.resize(l,c)
+    Curses.stdscr.addstr('Resizing...')
+    #Curses.stdscr.setpos(0,0)
+    Curses.stdscr.refresh 
+    return true
+  end
+end
+
 def bg_screen(args)
   h = Curses.lines
   w = Curses.cols
+  
   screen = InteractiveScreen.new(args.merge(height: h, width: w, top: 0, left: 0, fg: :white, bkgd: " "))
 end
 
 def initialize_ui
 
-  h = Curses.lines
-  w = Curses.cols
 
   Settings.load
 
-  pad = 2
-  def_h = h < 40 ? h/2 : 15 + pad * 2
-  def_w = w < 88 ? w/2 : 40 + pad * 2
-  def_t = h < 40 ? h/2 : (h - def_h) / 2
-  def_l = (w - def_w) / 2
-  color_scheme = ColorSchemes.get(Settings.get("theme"))
-  col1 = color_scheme[:col1] #[:white, Settings.get("bkgd_color").to_sym]
-  col2 = color_scheme[:col2] #[:red, :yellow]
-  fg = col1[0]
-  bg = col1[1]
+  large_enough = true
+  if Curses.lines < 29 || Curses.cols < 99
+    large_enough = resize_prompt
+  end
 
-  default_win_size = { :height => def_h,
-                       :width => def_w,
-                       :top => def_t,
-                       :left => def_l,
-                       :padding => pad,
-                       :col1 => col1,
-                       :col2 => col2,
-                       :col3 => color_scheme[:col3],
-                       :fg => fg,
-                       :bg => bg,
-                       :border_top => "-",
-                       :border_side => "|"}.merge(color_scheme)
+  if large_enough
+    h = Curses.lines
+    w = Curses.cols
+    pad = 2
+    def_h = h < 40 ? h/2 : 15 + pad * 2
+    def_w = w < 88 ? w/2 : 40 + pad * 2
+    def_t = h < 40 ? h/2 : (h - def_h) / 2
+    def_l = (w - def_w) / 2
+    color_scheme = ColorSchemes.get(Settings.get("theme"))
+    col1 = color_scheme[:col1] #[:white, Settings.get("bkgd_color").to_sym]
+    col2 = color_scheme[:col2] #[:red, :yellow]
+    fg = col1[0]
+    bg = col1[1]
+
+    default_win_size = { :height => def_h,
+                         :width => def_w,
+                         :top => def_t,
+                         :left => def_l,
+                         :padding => pad,
+                         :col1 => col1,
+                         :col2 => col2,
+                         :col3 => color_scheme[:col3],
+                         :fg => fg,
+                         :bg => bg,
+                         :border_top => "-",
+                         :border_side => "|"}.merge(color_scheme)
 
 
-  screen = WindowTemplates.interactive_screen
-  
-  title_top = h < 40 ? 0 : 3
-  title_args = default_win_size.merge(top: title_top)
+    screen = WindowTemplates.interactive_screen
+    
+    title_top = h < 40 ? 0 : 3
+    title_args = default_win_size.merge(top: title_top)
 
-  screen.add_region(title_screen(title_args))
-  screen.add_region(start_menu(default_win_size.merge(top: 25)))
-  screen.update
-  input_handler = InputHandler.new(in: screen)
-
-  loop do
-    input_handler.get_input
+    screen.add_region(title_screen(title_args))
+    screen.add_region(start_menu(default_win_size.merge(top: 25)))
     screen.update
+    input_handler = InputHandler.new(in: screen)
+
+    loop do
+      input_handler.get_input
+      screen.update
+    end
   end
 end
 
@@ -400,7 +447,7 @@ begin
   Curses.noecho
   Curses.curs_set(0)
   Curses.cbreak
-  
+
   initialize_ui
 ensure
   Curses.echo
